@@ -1,15 +1,19 @@
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
+import { useAuth } from '@/contexts/AuthContext';
+import { useMessaging } from '@/contexts/MessagingContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    FlatList,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 // Mock data for development
@@ -61,6 +65,8 @@ export default function ExploreScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [currentUserIndex, setCurrentUserIndex] = useState(0);
+  const { createChat } = useMessaging();
+  const { user } = useAuth();
   const colorScheme = useColorScheme();
 
   const availableInterests = ['tech', 'music', 'art', 'sports', 'fitness', 'coffee', 'travel', 'books', 'yoga', 'food'];
@@ -94,9 +100,23 @@ export default function ExploreScreen() {
     setCurrentUserIndex(prev => Math.min(prev + 1, filteredUsers.length - 1));
   };
 
-  const handleStartChat = (userId: string) => {
-    // TODO: Navigate to chat screen
-    console.log('Starting chat with:', userId);
+  const handleStartChat = async (userId: string) => {
+    if (!user) {
+      Alert.alert('Error', 'Please sign in to start chatting');
+      return;
+    }
+
+    try {
+      // Create a new chat
+      const chatId = await createChat([user.id, userId]);
+      
+      // Navigate to the new chat
+      router.push(`/chat/${chatId}` as any);
+      
+      console.log('Started new chat:', chatId);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to start chat. Please try again.');
+    }
   };
 
   const renderUserCard = ({ item, index }: { item: typeof mockUsers[0], index: number }) => {

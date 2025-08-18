@@ -2,14 +2,15 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    FlatList,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 // Mock data for development
@@ -56,15 +57,13 @@ export default function ChatScreen() {
   );
 
   const handleChatPress = (chatId: string) => {
-    // TODO: Navigate to individual chat screen
-    console.log('Opening chat:', chatId);
-    // router.push(`/chat/${chatId}`);
+    // Navigate to individual chat screen
+    router.push(`/chat/${chatId}`);
   };
 
   const handleNewChat = () => {
-    // TODO: Navigate to explore/discovery screen
-    console.log('Starting new chat');
-    // router.push('/explore');
+    // Navigate to explore/discovery screen
+    router.push('/(tabs)/explore');
   };
 
   const renderChatItem = ({ item }: { item: typeof mockChats[0] }) => (
