@@ -1,0 +1,39 @@
+{
+  "name": "textsy-backend",
+  "version": "1.0.0",
+  "description": "Backend server for Textsy messaging app",
+  "main": "src/app.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "build": "echo 'No build step needed for Node.js'",
+    "test": "echo 'No tests specified'"
+  },
+  "keywords": ["messaging", "chat", "real-time", "socket.io"],
+  "author": "Textsy Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "dotenv": "^16.3.1",
+    "socket.io": "^4.7.4",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "firebase-admin": "^12.0.0",
+    "mongoose": "^8.0.3",
+    "redis": "^4.6.11",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
+    "multer": "^1.4.5-lts.1",
+    "compression": "^1.7.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
