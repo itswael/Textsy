@@ -1,24 +1,23 @@
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
 import compression from 'compression';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
+import cors from 'cors';
 import dotenv from 'dotenv';
+import express from 'express';
 import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import { createServer } from 'http';
+import morgan from 'morgan';
+import { Server } from 'socket.io';
 
 // Import configurations
-import { connectMongoDB, createRedisClient, closeRedisClient } from './config/database.js';
+import { closeRedisClient, connectMongoDB, createRedisClient } from './config/database.js';
 
 // Import middleware
-import { rateLimit: customRateLimit } from './middleware/auth.js';
 
 // Import routes
 import authRoutes from './routes/auth.js';
-import userRoutes from './routes/users.js';
 import chatRoutes from './routes/chats.js';
 import messageRoutes from './routes/messages.js';
+import userRoutes from './routes/users.js';
 
 // Import socket service
 import { setupSocketHandlers } from './services/socketService.js';
@@ -217,3 +216,5 @@ const startServer = async () => {
 startServer();
 
 export default app;
+
+
