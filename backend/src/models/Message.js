@@ -10,8 +10,7 @@ const messageSchema = new mongoose.Schema({
   sender: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
-    index: true
+    required: true
   },
   content: {
     type: String,
@@ -42,8 +41,7 @@ const messageSchema = new mongoose.Schema({
   },
   isRead: {
     type: Boolean,
-    default: false,
-    index: true
+    default: false
   },
   readBy: [{
     user: {
@@ -96,8 +94,7 @@ const messageSchema = new mongoose.Schema({
   }],
   isDeleted: {
     type: Boolean,
-    default: false,
-    index: true
+    default: false
   },
   deletedAt: Date,
   deletedBy: {
@@ -274,3 +271,5 @@ messageSchema.virtual('readCount').get(function() {
 });
 
 export default mongoose.model('Message', messageSchema);
+
+
