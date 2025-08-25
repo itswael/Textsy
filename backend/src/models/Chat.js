@@ -218,3 +218,5 @@ chatSchema.virtual('totalUnreadCount').get(function() {
 });
 
 export default mongoose.model('Chat', chatSchema);
+
+
