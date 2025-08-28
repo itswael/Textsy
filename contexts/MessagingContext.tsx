@@ -4,12 +4,16 @@ import React, { createContext, ReactNode, useContext, useEffect, useState } from
 
 export interface Message {
   id: string;
-  text: string;
+  chatId: string;
   senderId: string;
   receiverId: string;
+  content: string; // for socket communication
+  text?: string;   // for local compatibility
+  messageType?: string;
+  replyTo?: string;
+  metadata?: any;
   timestamp: Date;
   isRead: boolean;
-  chatId: string;
 }
 
 export interface Chat {
@@ -166,6 +170,7 @@ export const MessagingProvider: React.FC<MessagingProviderProps> = ({ children }
       const message: Message = {
         id: Date.now().toString(),
         text,
+        content: text, // ensure socket compatibility
         senderId: 'current-user-id', // TODO: Get from auth context
         receiverId,
         timestamp: new Date(),
