@@ -53,7 +53,7 @@ export default function ChatScreen() {
       // Load chat history
       loadChatHistory(id);
     }
-  }, [id, loadChatHistory]);
+  }, [id]);
 
   // Mark messages as read when viewing chat
   useEffect(() => {
