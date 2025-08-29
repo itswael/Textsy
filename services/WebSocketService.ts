@@ -32,43 +32,48 @@ class WebSocketService {
   }
 
   // Connect to WebSocket server
-  connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.config) {
-        reject(new Error('WebSocket service not configured'));
-        return;
-      }
+  async connect(): Promise<void> {
+    if (!this.config) {
+      throw new Error('WebSocket service not configured');
+    }
+    try {
+      // Dynamically import socket.io-client for environments where it's not bundled
+      const { io } = await import('socket.io-client');
+      this.socket = io(this.config.url, {
+        auth: {
+          token: this.config.authToken,
+        },
+        transports: ['websocket'],
+      });
 
-      try {
-        // For development, we'll simulate connection
-        // In production, this would be:
-        // this.socket = io(this.config.url, {
-        //   auth: {
-        //     token: this.config.authToken
-        //   }
-        // });
-
-        console.log('Connecting to WebSocket server...');
-        
-        // Simulate connection delay
-        setTimeout(() => {
-          this.socket = {} as Socket; // Mock socket
-          this.notifyConnectionChange(true);
-          console.log('Connected to WebSocket server');
-          resolve();
-        }, 1000);
-
-      } catch (error) {
-        console.error('Failed to connect to WebSocket server:', error);
-        reject(error);
-      }
-    });
+      this.socket.on('connect', () => {
+        this.notifyConnectionChange(true);
+        console.log('Connected to WebSocket server');
+      });
+      this.socket.on('disconnect', () => {
+        this.notifyConnectionChange(false);
+        console.log('Disconnected from WebSocket server');
+      });
+      this.socket.on('new-message', (data: any) => {
+        this.notifyMessageHandlers({ type: 'message', data: data.message });
+      });
+      this.socket.on('user-typing', (data: any) => {
+        this.notifyMessageHandlers({ type: 'typing', data });
+      });
+      this.socket.on('message-reaction', (data: any) => {
+        this.notifyMessageHandlers({ type: 'reaction', data });
+      });
+      // Add more event listeners as needed
+    } catch (error) {
+      console.error('Failed to connect to WebSocket server:', error);
+      throw error;
+    }
   }
 
   // Disconnect from server
   disconnect(): void {
     if (this.socket) {
-      // In production: this.socket.disconnect();
+      this.socket.disconnect();
       this.socket = null;
       this.notifyConnectionChange(false);
       console.log('Disconnected from WebSocket server');
@@ -82,53 +87,36 @@ class WebSocketService {
         reject(new Error('Not connected to WebSocket server'));
         return;
       }
-
-      try {
-        const wsMessage: WebSocketMessage = {
-          type: 'message',
-          data: message,
-        };
-
-        // In production: this.socket.emit('message', wsMessage);
-        console.log('Sending message via WebSocket:', wsMessage);
-        
-        // Simulate message delivery
-        setTimeout(() => {
-          console.log('Message delivered via WebSocket');
-          resolve();
-        }, 200);
-
-      } catch (error) {
-        console.error('Failed to send message via WebSocket:', error);
-        reject(error);
+      // You must join the chat before sending messages
+      if (message.chatId) {
+        this.socket.emit('join-chat', message.chatId);
       }
+      this.socket.emit('send-message', {
+        chatId: message.chatId,
+        content: message.content,
+        messageType: message.messageType || 'text',
+        replyTo: message.replyTo,
+        metadata: message.metadata || {},
+      }, (response: any) => {
+        if (response && response.error) {
+          reject(new Error(response.error));
+        } else {
+          resolve();
+        }
+      });
     });
   }
 
   // Send typing indicator
   sendTypingIndicator(chatId: string, isTyping: boolean): void {
     if (!this.socket) return;
-
-    const wsMessage: WebSocketMessage = {
-      type: 'typing',
-      data: { chatId, isTyping },
-    };
-
-    // In production: this.socket.emit('typing', wsMessage);
-    console.log('Sending typing indicator:', wsMessage);
+    this.socket.emit('typing', { chatId, isTyping });
   }
 
   // Send read receipt
   sendReadReceipt(chatId: string, messageIds: string[]): void {
     if (!this.socket) return;
-
-    const wsMessage: WebSocketMessage = {
-      type: 'read_receipt',
-      data: { chatId, messageIds },
-    };
-
-    // In production: this.socket.emit('read_receipt', wsMessage);
-    console.log('Sending read receipt:', wsMessage);
+    this.socket.emit('mark-read', { chatId, messageIds });
   }
 
   // Subscribe to incoming messages
