@@ -14,8 +14,9 @@ Textsy is a React Native mobile application that enables users to discover and c
 - **Modern UI**: Beautiful, responsive design with light/dark theme support
 - **Privacy Controls**: Manage your online status and location sharing
 
+Also included: a Node.js/Express backend (`backend/`) with a Socket.io messaging service, MongoDB models for users/chats/messages, and Firebase-token-based authentication middleware — the mobile client currently talks to it partially (see Authentication below).
+
 ### Planned Features (Future)
-- **Real-time Messaging**: WebSocket-based instant messaging
 - **Group Chats**: Connect with multiple people at once
 - **AI Icebreakers**: Smart conversation starters for new matches
 - **Voice Messages**: Send audio messages to your connections
@@ -24,14 +25,17 @@ Textsy is a React Native mobile application that enables users to discover and c
 
 ## 🛠️ Tech Stack
 
-- **Frontend**: React Native + Expo
-- **Language**: TypeScript
-- **Navigation**: Expo Router
-- **State Management**: React Context API
-- **Storage**: AsyncStorage (local), Firebase (planned)
-- **Authentication**: Firebase Auth (planned)
-- **Real-time**: Socket.io (planned)
-- **Database**: PostgreSQL + Redis (planned)
+**Mobile app**
+- React Native + Expo (Expo Router), TypeScript
+- React Context API for state management
+- AsyncStorage for local persistence
+- Socket.io client for real-time messaging
+
+**Backend** (`backend/`)
+- Node.js + Express, Socket.io for WebSocket messaging
+- MongoDB (Mongoose) for data storage, Redis for caching
+- Firebase Admin SDK for token verification + JWT
+- Helmet, CORS, and rate limiting middleware
 
 ## 📱 Screenshots
 
@@ -49,8 +53,8 @@ Textsy is a React Native mobile application that enables users to discover and c
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/textsy.git
-   cd textsy
+   git clone https://github.com/itswael/Textsy.git
+   cd Textsy
    ```
 
 2. **Install dependencies**
@@ -67,6 +71,17 @@ Textsy is a React Native mobile application that enables users to discover and c
    - Press `i` for iOS simulator
    - Press `a` for Android emulator
    - Scan QR code with Expo Go app on your phone
+
+### Backend Setup (optional, for real-time messaging)
+
+```bash
+cd backend
+cp env.example .env   # fill in MongoDB/Redis/Firebase values
+npm install
+npm run dev            # nodemon src/app.js
+```
+
+The backend expects a running MongoDB instance (`MONGODB_URI`) and, optionally, Redis (`REDIS_URL`) and a Firebase service account for token verification.
 
 ### Development Commands
 
@@ -115,18 +130,22 @@ textsy/
 │   └── Colors.ts          # Color definitions
 ├── hooks/                  # Custom React hooks
 │   └── useColorScheme.ts  # Theme hook
-└── assets/                 # Images, fonts, and other assets
+├── services/                # WebSocketService, MessageStorageService
+├── assets/                  # Images, fonts, and other assets
+└── backend/                 # Express + Socket.io + MongoDB API server
+    └── src/
+        ├── routes/          # auth, users, chats, messages
+        ├── models/          # User, Chat, Message (Mongoose)
+        ├── services/        # socketService (real-time messaging)
+        ├── middleware/       # Firebase token verification
+        └── config/           # MongoDB/Redis/Firebase config
 ```
 
 ## 🔐 Authentication
 
-The app currently uses mock authentication for development purposes. Users can:
-- Sign up with email, password, name, bio, and interests
-- Sign in with email and password
-- Use Google OAuth (mock implementation)
-- Manage profile information
+The mobile client currently uses local mock authentication (AsyncStorage) for development: users can sign up, sign in, and use a mocked Google sign-in flow, all stored on-device.
 
-**Note**: Real Firebase authentication will be implemented in Phase 2.
+The backend already implements the real path: `POST /api/auth/verify` validates a Firebase ID token via the Firebase Admin SDK and creates/updates the corresponding MongoDB user record. Wiring the mobile client to this endpoint (replacing the mock) is the main remaining step to go from mock to real authentication.
 
 ## 🎨 UI/UX Features
 
@@ -149,13 +168,11 @@ The app currently uses mock authentication for development purposes. Users can:
 - [x] Basic UI components
 
 ### 🚧 In Progress (Phase 2)
-- [ ] Real-time messaging implementation
-- [ ] Individual chat screens
-- [ ] WebSocket integration
-- [ ] Message storage and persistence
+- [x] Backend API (Express, MongoDB, Socket.io) and real-time messaging service
+- [ ] Wiring the mobile client's auth flow to the backend's Firebase verification
+- [ ] Individual chat screens fully backed by persisted message history
 
 ### 📋 Planned (Phase 3 & 4)
-- [ ] Firebase backend integration
 - [ ] User blocking and reporting
 - [ ] End-to-end encryption
 - [ ] Push notifications
@@ -180,8 +197,7 @@ We welcome contributions! Please follow these steps:
 
 ## 🐛 Known Issues
 
-- Mock authentication (will be replaced with Firebase)
-- No real-time messaging yet
+- Mobile client still uses mock local authentication instead of the backend's Firebase-based flow
 - Limited offline functionality
 - No push notifications
 
@@ -211,9 +227,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/textsy/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/textsy/discussions)
-- **Email**: support@textsy.app
+- **Issues**: [GitHub Issues](https://github.com/itswael/Textsy/issues)
 
 ---
 
