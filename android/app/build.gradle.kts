@@ -47,7 +47,11 @@ android {
     }
 
     testOptions {
-        unitTests.isReturnDefaultValues = true
+        unitTests {
+            isReturnDefaultValues = true
+            // Lets Robolectric load the app's real resources (strings, themes) for UI tests.
+            isIncludeAndroidResources = true
+        }
     }
 
     lint {
@@ -57,9 +61,27 @@ android {
     }
 }
 
-// Integration tests only run when TEXTSY_API_URL is set; re-run them whenever it changes.
 tasks.withType<Test>().configureEach {
+    // Integration tests only run when TEXTSY_API_URL is set; re-run them whenever it changes.
     inputs.property("textsyApiUrl", providers.environmentVariable("TEXTSY_API_URL").orElse(""))
+
+    // Robolectric reaches into JDK internals, which JDK 17+ blocks unless the modules are opened.
+    jvmArgs(
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-exports=java.base/jdk.internal.access=ALL-UNNAMED",
+    )
+
+    // Optional: point Robolectric at a local folder of android-all jars instead of letting it download
+    // them (offline machines, CI caches, throttled networks).
+    providers.environmentVariable("ROBOLECTRIC_DEPENDENCY_DIR").orNull?.let { dir ->
+        systemProperty("robolectric.offline", "true")
+        systemProperty("robolectric.dependency.dir", dir)
+    }
 }
 
 kotlin {
@@ -109,4 +131,10 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.org.json)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
