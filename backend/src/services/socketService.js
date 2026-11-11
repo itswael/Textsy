@@ -59,7 +59,10 @@ export const setupSocketHandlers = (io) => {
       socket.data.userId = String(user._id);
       next();
     } catch (error) {
-      next(new Error(error.statusCode ? error.message : 'Authentication failed'));
+      // `data.code` lets clients tell a rejected session apart from a dropped network.
+      const rejection = new Error(error.statusCode ? error.message : 'Authentication failed');
+      rejection.data = { code: error.code || 'auth' };
+      next(rejection);
     }
   });
 
