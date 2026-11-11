@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -9,6 +11,17 @@ plugins {
 // Release builds must be given the URL: ./gradlew assembleRelease -Ptextsy.apiUrl=https://api.example.com
 val releaseApiUrl: String? = providers.gradleProperty("textsy.apiUrl").orNull
 val debugApiUrl: String = providers.gradleProperty("textsy.debugApiUrl").getOrElse("http://10.0.2.2:3000")
+
+// Signing for release APKs. Create android/keystore.properties (it is git-ignored) with:
+//   storeFile=/path/to/textsy.jks
+//   storePassword=...
+//   keyAlias=textsy
+//   keyPassword=...
+// Without it, assembleRelease produces an unsigned APK that Android will refuse to install.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
 
 android {
     namespace = "app.textsy"
@@ -24,12 +37,24 @@ android {
         androidResources.localeFilters += listOf("en", "hi")
     }
 
+    signingConfigs {
+        if (keystoreProperties.isNotEmpty()) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             buildConfigField("String", "API_BASE_URL", "\"$debugApiUrl\"")
         }
         release {
             buildConfigField("String", "API_BASE_URL", "\"${releaseApiUrl ?: "https://unset.invalid"}\"")
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
