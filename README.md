@@ -14,7 +14,7 @@ Textsy is a React Native mobile application that enables users to discover and c
 - **Modern UI**: Beautiful, responsive design with light/dark theme support
 - **Privacy Controls**: Manage your online status and location sharing
 
-Also included: a Node.js/Express backend (`backend/`) with a Socket.io messaging service, MongoDB models for users/chats/messages, and Firebase-token-based authentication middleware — the mobile client currently talks to it partially (see Authentication below).
+Also included: a Node.js/Express backend (`backend/`) with email/password accounts, interest-based discovery, blocking, and persisted real-time chat over Socket.io. It is covered by an automated test suite; the mobile app is still being wired to it (see Authentication below). The full plan and progress live in [`docs/SPEC.md`](docs/SPEC.md).
 
 ### Planned Features (Future)
 - **Group Chats**: Connect with multiple people at once
@@ -33,9 +33,10 @@ Also included: a Node.js/Express backend (`backend/`) with a Socket.io messaging
 
 **Backend** (`backend/`)
 - Node.js + Express, Socket.io for WebSocket messaging
-- MongoDB (Mongoose) for data storage, Redis for caching
-- Firebase Admin SDK for token verification + JWT
-- Helmet, CORS, and rate limiting middleware
+- MongoDB (Mongoose) for data storage
+- bcrypt-hashed passwords and JWT sessions
+- Helmet, CORS, and per-user / per-login rate limiting
+- Tests with `node:test`, supertest and an in-memory MongoDB
 
 ## 📱 Screenshots
 
@@ -72,16 +73,17 @@ Also included: a Node.js/Express backend (`backend/`) with a Socket.io messaging
    - Press `a` for Android emulator
    - Scan QR code with Expo Go app on your phone
 
-### Backend Setup (optional, for real-time messaging)
+### Backend Setup
 
 ```bash
 cd backend
-cp env.example .env   # fill in MongoDB/Redis/Firebase values
+cp env.example .env   # set MONGODB_URI and JWT_SECRET
 npm install
-npm run dev            # nodemon src/app.js
+npm run dev           # nodemon src/index.js
+npm test              # runs against an in-memory MongoDB (downloaded on first run)
 ```
 
-The backend expects a running MongoDB instance (`MONGODB_URI`) and, optionally, Redis (`REDIS_URL`) and a Firebase service account for token verification.
+The backend needs a running MongoDB (`MONGODB_URI`). In production it refuses to start unless `JWT_SECRET` is a random string of at least 32 characters. All settings are documented in `backend/env.example`.
 
 ### Development Commands
 
@@ -136,16 +138,17 @@ textsy/
     └── src/
         ├── routes/          # auth, users, chats, messages
         ├── models/          # User, Chat, Message (Mongoose)
-        ├── services/        # socketService (real-time messaging)
-        ├── middleware/       # Firebase token verification
-        └── config/           # MongoDB/Redis/Firebase config
+        ├── services/        # chatService, socketService (real-time messaging)
+        ├── middleware/      # JWT auth, rate limiters
+        ├── utils/           # validators, serializers, error handling
+        └── config/          # environment config, MongoDB connection
 ```
 
 ## 🔐 Authentication
 
 The mobile client currently uses local mock authentication (AsyncStorage) for development: users can sign up, sign in, and use a mocked Google sign-in flow, all stored on-device.
 
-The backend already implements the real path: `POST /api/auth/verify` validates a Firebase ID token via the Firebase Admin SDK and creates/updates the corresponding MongoDB user record. Wiring the mobile client to this endpoint (replacing the mock) is the main remaining step to go from mock to real authentication.
+The backend implements real authentication: `POST /api/auth/register` and `POST /api/auth/login` (email or handle plus password) return a JWT, and every request and socket connection re-checks that the account exists and is not banned. Wiring the mobile client to these endpoints (replacing the mock) is the main remaining step.
 
 ## 🎨 UI/UX Features
 
@@ -197,7 +200,7 @@ We welcome contributions! Please follow these steps:
 
 ## 🐛 Known Issues
 
-- Mobile client still uses mock local authentication instead of the backend's Firebase-based flow
+- Mobile client still uses mock local authentication instead of the backend's email/password API
 - Limited offline functionality
 - No push notifications
 
