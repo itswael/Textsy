@@ -8,6 +8,8 @@
 | **Status legend** | `[ ]` not started · `[~]` partial / mock only · `[x]` done and verified |
 
 This is the single source of truth for what Textsy is, what v1 contains, and how it is built.
+
+> **Verification level.** `[x]` means built and covered by automated tests, including the Android client running against the real backend. **Nothing has been run on a physical Android device yet**, so a device run is still needed before the beta.
 Update the checkboxes and the change log as work lands. If code and spec disagree, fix one of them in the same commit.
 
 ---
@@ -71,20 +73,20 @@ Discovery is by **city and self-declared area**, plus interests.
 Priority: **P0** must exist for the beta, **P1** should exist for the beta, **P2** later.
 
 ### A. Accounts & identity
-- [~] **ACC-1 (P0)** Register with email + password + unique handle; login by email or handle. *(Backend done and tested. App UI is still mocked.)*
-- [~] **ACC-2 (P0)** Passwords hashed (bcrypt); JWT access token; token stored in secure storage on device. *(Backend done. Secure storage on the device pending.)*
-- [ ] **ACC-3 (P0)** Session restore on app start; logout clears token and socket.
-- [~] **ACC-4 (P1)** Closed-beta invite code required at signup (env-configured list). *(Backend done. Field missing in the app.)*
-- [~] **ACC-5 (P1)** Age gate: user confirms they are 18+. *(Backend enforces it. Checkbox missing in the app.)*
-- [~] **ACC-6 (P0)** In-app account deletion (hard delete of user, their Sparks, requests, messages marked deleted). *(Backend done: password-confirmed, chats retired, messages scrubbed, sockets dropped. Sparks/requests do not exist yet. App button is still a TODO.)*
+- [x] **ACC-1 (P0)** Register with email + password + unique handle; login by email or handle. *(Backend and Android done. Android UI tests + live-backend tests; not yet on a physical device.)*
+- [x] **ACC-2 (P0)** Passwords hashed (bcrypt); JWT access token; token stored in secure storage on device. *(bcrypt, JWT, session stored encrypted with an Android Keystore key. The Keystore part cannot run in unit tests, so it is unverified until a device run.)*
+- [x] **ACC-3 (P0)** Session restore on app start; logout clears token and socket. *(Saved session is checked on launch, opens offline, and sign-out clears the token and the socket.)*
+- [x] **ACC-4 (P1)** Closed-beta invite code required at signup (env-configured list). *(Invite code field on the sign-up screen; the server enforces it when `INVITE_CODES` is set.)*
+- [x] **ACC-5 (P1)** Age gate: user confirms they are 18+. *(18+ checkbox; the server refuses sign-up without it.)*
+- [x] **ACC-6 (P0)** In-app account deletion (hard delete of user, their Sparks, requests, messages marked deleted). *(Backend and app: password-confirmed, chats retired, messages scrubbed, sockets dropped. Sparks and requests do not exist yet.)*
 - [ ] **ACC-7 (P2)** Email verification, password reset.
 - [ ] **ACC-8 (P2)** Phone-number OTP login (number never displayed).
 
 ### B. Profile
-- [~] **PRF-1 (P0)** Edit display name, bio (≤160 chars), avatar (emoji in v1), language, city, area. *(`PUT /users/me` done and tested. Edit screen is a TODO.)*
-- [~] **PRF-2 (P0)** Interests: choose from a seeded list + custom, max 10, each ≤20 chars. *(Backend normalises, dedupes and limits them. Picker UI missing.)*
+- [x] **PRF-1 (P0)** Edit display name, bio (≤160 chars), avatar (emoji in v1), language, city, area. *(Edit name, bio, avatar emoji and area; language is switched from the profile screen. City is fixed to the configured one.)*
+- [x] **PRF-2 (P0)** Interests: choose from a seeded list + custom, max 10, each ≤20 chars. *(Typed as comma-separated text (max 10, 20 characters each). There is no seeded picker yet.)*
 - [ ] **PRF-3 (P1)** Photo avatar upload.
-- [~] **PRF-4 (P0)** Public profile view by handle (name, bio, interests, area, active Sparks). Never email/phone. *(`GET /users/:handle` done and tested; no Sparks yet; no screen.)*
+- [~] **PRF-4 (P0)** Public profile view by handle (name, bio, interests, area, active Sparks). Never email/phone. *(Public profile endpoint exists and is tested. The app shows a summary on each person card; there is no separate profile screen.)*
 
 ### C. Sparks (the core feed)
 - [ ] **SPK-1 (P0)** Create Spark: text ≤280, 1–5 tags, expiry 1/3/7 days.
@@ -96,25 +98,25 @@ Priority: **P0** must exist for the beta, **P1** should exist for the beta, **P2
 - [ ] **SPK-7 (P2)** Optional distance buckets using device location.
 
 ### D. Discovery (People)
-- [~] **DSC-1 (P0)** People list in my city, ranked by shared interests, then recent activity. *(Backend done and tested. Explore screen still shows mock data.)*
-- [~] **DSC-2 (P0)** Search by handle / interest (escaped, case-insensitive, min 2 chars). *(Backend done and tested.)*
-- [ ] **DSC-3 (P1)** Explain the match ("You both like cricket, coffee").
+- [x] **DSC-1 (P0)** People list in my city, ranked by shared interests, then recent activity. *(People tab ranks by shared interests, with interest filter chips and paging. Android UI tests + live-backend tests; not yet on a physical device.)*
+- [x] **DSC-2 (P0)** Search by handle / interest (escaped, case-insensitive, min 2 chars). *(Debounced search by name, handle or interest. Android UI tests + live-backend tests; not yet on a physical device.)*
+- [x] **DSC-3 (P1)** Explain the match ("You both like cricket, coffee"). *(Each person shows "You both like ...".)*
 - [ ] **DSC-4 (P2)** Hide me from people in my phone contacts.
 
 ### E. Intro requests & chat
-- [ ] **CHT-1 (P0)** Send intro request (note ≤200 chars), optional Spark reference. One pending request per pair; daily send cap (default 10).
+- [ ] **CHT-1 (P0)** Send intro request (note ≤200 chars), optional Spark reference. One pending request per pair; daily send cap (default 10). *(Not built. Until then "Say hi" opens a chat directly, allowed only while `ALLOW_DIRECT_CHAT_CREATION=true`.)*
 - [ ] **CHT-2 (P0)** Inbox of received requests; accept / ignore. Ignored requests are silent to the sender.
 - [ ] **CHT-3 (P0)** Accepting creates (or reuses) a direct chat; the note becomes the first message.
-- [~] **CHT-4 (P0)** Realtime text messages (≤1000 chars) via WebSocket with ack; history via REST, paginated. *(Backend done and tested. App not wired.)*
-- [~] **CHT-5 (P0)** Chat list with last message, time, unread badge; persisted on the server (no local-only chats). *(Backend done and tested. App still uses local mock chats.)*
-- [~] **CHT-6 (P1)** Typing indicator, read state ("seen"). *(Backend done and tested.)*
-- [~] **CHT-7 (P1)** Offline resilience: queued sends retry on reconnect; messages de-duplicated by client id. *(Server-side de-duplication done and tested. Client queue pending.)*
+- [x] **CHT-4 (P0)** Realtime text messages (≤1000 chars) via WebSocket with ack; history via REST, paginated. *(Realtime send with acknowledgement, paged history. Android UI tests + live-backend tests; not yet on a physical device.)*
+- [x] **CHT-5 (P0)** Chat list with last message, time, unread badge; persisted on the server (no local-only chats). *(Chat list with last message, time and unread badge, loaded from the server. Android UI tests + live-backend tests; not yet on a physical device.)*
+- [x] **CHT-6 (P1)** Typing indicator, read state ("seen"). *(Typing indicator and "seen". Android UI tests + live-backend tests; not yet on a physical device.)*
+- [x] **CHT-7 (P1)** Offline resilience: queued sends retry on reconnect; messages de-duplicated by client id. *(Failed sends are marked and retried automatically on reconnect under the same client id, so they are never duplicated.)*
 - [ ] **CHT-8 (P1)** Push notifications for requests and messages (FCM via Expo).
 - [ ] **CHT-9 (P2)** Image messages, reactions, replies, edit/delete, search in chat.
 - [ ] **CHT-10 (P2)** Group chats, pinned messages, archive.
 
 ### F. Safety & moderation
-- [~] **SAF-1 (P0)** Block user: mutual invisibility (feeds, search, profile, requests, chat send). *(Done for discover, search, profile, chat list and chat send. Sparks and requests do not exist yet. No app UI.)*
+- [~] **SAF-1 (P0)** Block user: mutual invisibility (feeds, search, profile, requests, chat send). *(Block from the chat menu and an unblock list in Profile. Covers discover, search, profile, chat list and chat send. Sparks and requests do not exist yet.)*
 - [ ] **SAF-2 (P0)** Report user or Spark with a reason; stored for review.
 - [~] **SAF-3 (P0)** Banned users cannot log in, connect a socket, or send anything. *(Login, REST and socket handshake are checked on every request. A socket already open when a ban is applied stays connected until it drops.)*
 - [~] **SAF-4 (P0)** Rate limits per user (not only per IP; many Indian mobile users share carrier IPs). *(Login throttle, per-user REST limit and socket send limit are in. Only the login and socket limits have tests.)*
@@ -123,15 +125,15 @@ Priority: **P0** must exist for the beta, **P1** should exist for the beta, **P2
 - [ ] **SAF-7 (P2)** Selfie/liveness "verified human" badge.
 
 ### G. Settings & i18n
-- [ ] **SET-1 (P0)** Language switch Hindi / English; all strings externalised.
-- [~] **SET-2 (P1)** Privacy toggles that actually do something: show online status, show last seen. *(Backend honours both in profiles and presence. The app toggles are still local state.)*
-- [~] **SET-3 (P1)** Blocked users list with unblock. *(Backend done. No screen.)*
+- [x] **SET-1 (P0)** Language switch Hindi / English; all strings externalised. *(All strings externalised in English and Hindi; lint fails on a missing translation. The Hindi text is a first draft and needs review by a native speaker.)*
+- [x] **SET-2 (P1)** Privacy toggles that actually do something: show online status, show last seen. *(Both switches save to the server and the server honours them. Android UI tests + live-backend tests; not yet on a physical device.)*
+- [x] **SET-3 (P1)** Blocked users list with unblock. *(Blocked users screen with unblock.)*
 
 ### H. Platform & operations
-- [ ] **OPS-1 (P0)** App talks to a configurable API base URL (`BuildConfig.API_BASE_URL`, set per build type); no hard-coded localhost.
-- [~] **OPS-2 (P0)** Backend automated tests (auth, sparks, requests, chat) run in CI. *(52 tests pass locally against real MongoDB. CI workflow still to add. Sparks/requests will add tests.)*
+- [x] **OPS-1 (P0)** App talks to a configurable API base URL (`BuildConfig.API_BASE_URL`, set per build type); no hard-coded localhost. *(`BuildConfig.API_BASE_URL`: debug reads `textsy.debugApiUrl`; release requires `-Ptextsy.apiUrl` and refuses to build without it.)*
+- [~] **OPS-2 (P0)** Backend automated tests (auth, sparks, requests, chat) run in CI. *(Backend: 52 tests. Android: 130 JVM tests (unit, repositories, Compose UI) plus 8 live-backend tests. No CI workflow yet.)*
 - [ ] **OPS-3 (P0)** Deployment on one VM with HTTPS (reverse proxy), process supervision, Mongo backups.
-- [ ] **OPS-4 (P0)** Reproducible Android APK build documented.
+- [~] **OPS-4 (P0)** Reproducible Android APK build documented. *(Debug and signed release builds work and are documented in the README. The release APK is about 2 MB. Not yet installed on a device.)*
 - [ ] **OPS-5 (P1)** Structured logs, `/health`, simple uptime check.
 - [ ] **OPS-6 (P2)** Social feed (Posts, Circles, trending) and later video.
 
@@ -288,15 +290,18 @@ Found by code review; update status as they are fixed.
 - [x] `middleware/auth.js`: `requireAdmin` reads `user.isAdmin`, which the schema does not define. Rate limit is per IP only. **Fixed:** the unused admin middleware is removed and limits are per user.
 - [~] No tests, no CI, no Dockerfile. **Partly fixed:** 52 integration tests exist; CI and deployment files are still to do.
 
-**Mobile**
-- [ ] `contexts/AuthContext.tsx`: sign-in always returns the same hard-coded user (`Alex Chen`, id `1`); the password is logged to the console.
-- [ ] `app/(tabs)/explore.tsx`, `app/(tabs)/chat.tsx`: hard-coded mock users/chats; like/pass are TODOs; match score is a constant.
-- [ ] `contexts/MessagingContext.tsx`: `senderId` is `'current-user-id'`; `createChat` only writes to AsyncStorage; chat state is saved from stale closures.
-- [ ] `app/chat/[id].tsx`: chat partner is mocked; the chat id is passed as the receiver id.
-- [ ] `services/WebSocketService.ts`: URL is `ws://localhost:3000` and no auth token is set; it listens to `new-message` but never joins rooms reliably.
-- [ ] `app/(tabs)/index.tsx` is still the Expo starter screen.
-- [ ] `app/(tabs)/profile.tsx`: toggles are local state only; edit profile, blocked users and delete account are TODOs.
-- [ ] No i18n; no environment-based API URL.
+**Mobile.** The previous Expo/React Native app (all mock data) was removed and replaced by the native Android app, so its list of problems no longer applies.
+
+**Known limitations of the Android app (current)**
+- [ ] Not run on a physical device or emulator yet. UI and flows are verified on the JVM with Robolectric and against the real backend.
+- [ ] No push notifications, so messages only arrive while the app is open (CHT-8).
+- [ ] Chat history is not cached on the device; opening a chat offline shows nothing until the network is back. Unsent messages are queued and retried.
+- [ ] The Hindi translations are a first draft and need review by a native speaker.
+- [ ] "Say hi" depends on the temporary `ALLOW_DIRECT_CHAT_CREATION` flag. It must be `true` on a beta server running in production mode, until intro requests exist.
+- [ ] The delete-account dialog cannot be driven by a Robolectric UI test (any dialog containing a text field never goes idle there). Its rules are covered by `DeleteAccountViewModelTest` instead.
+- [ ] The session encryption uses the Android Keystore, which has no unit-test coverage.
+- [ ] AGP and AndroidX are pinned for AGP 8.13 (see D14); upgrade with Android Studio's assistant.
+- [ ] Application id `app.textsy` is a placeholder (D13).
 
 ## 13. Open questions
 
@@ -312,3 +317,4 @@ Found by code review; update status as they are fixed.
 |---|---|
 | 2026-11-11 | Initial spec drafted (v0.1). |
 | 2026-11-11 | Backend Phase 0 done: own auth, reworked models, discovery/search/blocking, persisted chats and realtime messaging, 52 passing tests. Known backend issues fixed; spec tables updated to match the implementation. |
+| 2026-11-11 | Rebuilt the mobile app natively for Android (Kotlin, Compose). Sign-in, sign-up, chats with live messaging, people discovery and search, profile, privacy, blocking, account deletion, English and Hindi. 138 Android tests, a live-backend suite, lint with no errors, and signed minified release builds. The Expo app was removed. |

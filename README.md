@@ -1,237 +1,125 @@
-# Textsy 📱
+# Textsy
 
-**Connect with people who share your interests**
+**Find people nearby who share your interests, and talk to them.**
 
-Textsy is a React Native mobile application that enables users to discover and connect with people based on shared interests. Built with modern technologies and a focus on privacy and security.
+Textsy is a mobile app (native Android, Kotlin) with a Node.js backend. People sign up with a handle, say what they are into, discover others in their city, and chat in real time. It is being built for a closed beta in Meerut, India, in English and Hindi.
 
-## 🚀 Features
+The plan, scope and progress live in [`docs/SPEC.md`](docs/SPEC.md).
 
-### MVP Features (Current)
-- **User Authentication**: Email/password and Google OAuth sign-in
-- **Profile Management**: Create and customize your profile with interests and bio
-- **Interest-Based Discovery**: Find users who share your passions
-- **Chat Interface**: View and manage your conversations
-- **Modern UI**: Beautiful, responsive design with light/dark theme support
-- **Privacy Controls**: Manage your online status and location sharing
+## What works today
 
-Also included: a Node.js/Express backend (`backend/`) with email/password accounts, interest-based discovery, blocking, and persisted real-time chat over Socket.io. It is covered by an automated test suite; the mobile app is still being wired to it (see Authentication below). The full plan and progress live in [`docs/SPEC.md`](docs/SPEC.md).
+- **Accounts:** sign up with a handle, invite code and 18+ confirmation; sign in by email or handle; the session is stored encrypted on the device and survives restarts, including opening the app offline.
+- **Discovery:** people in your city ranked by shared interests, interest filter chips, and search by name, handle or interest.
+- **Chat:** real-time 1:1 messages with sending / failed / sent / seen states, typing indicator, online status, unread counts, paged history, and automatic retry when the connection returns (without duplicates).
+- **Safety and privacy:** block and unblock, privacy switches for online status and last seen, email never shown to others, account deletion confirmed with your password.
+- **Languages:** English and Hindi, switchable in the app.
 
-### Planned Features (Future)
-- **Group Chats**: Connect with multiple people at once
-- **AI Icebreakers**: Smart conversation starters for new matches
-- **Voice Messages**: Send audio messages to your connections
-- **Media Sharing**: Share images and videos in conversations
-- **Nearby Discovery**: Find users in your area
+Not built yet: Sparks (short "what I'm open to" posts), intro requests, the feed, push notifications, images. See the spec.
 
-## 🛠️ Tech Stack
+## Repository layout
 
-**Mobile app**
-- React Native + Expo (Expo Router), TypeScript
-- React Context API for state management
-- AsyncStorage for local persistence
-- Socket.io client for real-time messaging
+```
+android/   Native Android app (Kotlin, Jetpack Compose, Material 3)
+backend/   API and real-time server (Node.js, Express, Socket.IO, MongoDB)
+docs/      Product and technical spec
+```
 
-**Backend** (`backend/`)
-- Node.js + Express, Socket.io for WebSocket messaging
-- MongoDB (Mongoose) for data storage
-- bcrypt-hashed passwords and JWT sessions
-- Helmet, CORS, and per-user / per-login rate limiting
-- Tests with `node:test`, supertest and an in-memory MongoDB
+## Run it locally
 
-## 📱 Screenshots
+You need **Node 20+** and **Android Studio** (or JDK 17+ and the Android SDK).
 
-*Screenshots will be added as the app develops*
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Node.js (v18 or higher)
-- npm or yarn
-- Expo CLI
-- iOS Simulator (for iOS development) or Android Emulator
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/itswael/Textsy.git
-   cd Textsy
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Start the development server**
-   ```bash
-   npm start
-   ```
-
-4. **Run on your device/simulator**
-   - Press `i` for iOS simulator
-   - Press `a` for Android emulator
-   - Scan QR code with Expo Go app on your phone
-
-### Backend Setup
+### 1. Start the backend
 
 ```bash
 cd backend
-cp env.example .env   # set MONGODB_URI and JWT_SECRET
 npm install
-npm run dev           # nodemon src/index.js
-npm test              # runs against an in-memory MongoDB (downloaded on first run)
+npm run dev:memory    # API on :3000 with a throw-away in-memory MongoDB
 ```
 
-The backend needs a running MongoDB (`MONGODB_URI`). In production it refuses to start unless `JWT_SECRET` is a random string of at least 32 characters. All settings are documented in `backend/env.example`.
+`npm run dev:memory` downloads a MongoDB binary the first time and forgets all data when you stop it. To use a real MongoDB instead, copy `env.example` to `.env`, set `MONGODB_URI` and `JWT_SECRET`, and run `npm run dev`. Every setting is documented in `backend/env.example`.
 
-### Development Commands
+Until intro requests exist, "Say hi" opens a chat directly, which the server only allows when `ALLOW_DIRECT_CHAT_CREATION=true`. That is the default outside production; set it explicitly on a beta server that runs in production mode.
+
+### 2. Run the app
+
+Open the `android/` folder in Android Studio and run the `app` configuration.
+
+- **Emulator:** works as is. The emulator reaches your computer at `10.0.2.2`.
+- **Physical phone:** put your computer's address in `android/gradle.properties`, for example `textsy.debugApiUrl=http://192.168.1.20:3000`, and make sure the phone is on the same network.
+
+Debug builds allow plain HTTP so local testing needs no certificates. Release builds only talk to HTTPS.
+
+## Tests
 
 ```bash
-# Start development server
-npm start
+# Backend: tests against a real (in-memory) MongoDB, real HTTP and real WebSockets
+cd backend && npm test
 
-# Run on iOS
-npm run ios
+# Android: unit tests plus Compose UI tests on the JVM (Robolectric)
+cd android && ./gradlew testDebugUnitTest
 
-# Run on Android
-npm run android
+# Android client against a running backend (skipped unless the URL is set)
+cd backend && PORT=3999 npm run dev:memory          # in one terminal
+cd android && TEXTSY_API_URL=http://127.0.0.1:3999 ./gradlew testDebugUnitTest --tests '*BackendIntegrationTest*'
 
-# Run on web
-npm run web
-
-# Lint code
-npm run lint
-
-# Reset project (removes example code)
-npm run reset-project
+# Android lint (also checks that every English string has a Hindi translation)
+cd android && ./gradlew lintDebug
 ```
 
-## 🏗️ Project Structure
+The first Android UI test run makes Robolectric download an Android framework jar (about 200 MB). To use a copy you already have, set `ROBOLECTRIC_DEPENDENCY_DIR` to a folder containing the `android-all-instrumented-*.jar`.
 
-```
-textsy/
-├── app/                    # Main application screens
-│   ├── auth/              # Authentication screens
-│   │   ├── login.tsx      # Login screen
-│   │   ├── signup.tsx     # Registration screen
-│   │   └── _layout.tsx    # Auth navigation
-│   ├── (tabs)/            # Main app tabs
-│   │   ├── chat.tsx       # Chat list screen
-│   │   ├── explore.tsx    # User discovery screen
-│   │   ├── profile.tsx    # User profile screen
-│   │   └── _layout.tsx    # Tab navigation
-│   └── _layout.tsx        # Root layout with auth
-├── components/             # Reusable UI components
-│   ├── ThemedText.tsx     # Theme-aware text component
-│   ├── ThemedView.tsx     # Theme-aware view component
-│   └── ui/                # UI-specific components
-├── contexts/               # React Context providers
-│   └── AuthContext.tsx    # Authentication context
-├── constants/              # App constants
-│   └── Colors.ts          # Color definitions
-├── hooks/                  # Custom React hooks
-│   └── useColorScheme.ts  # Theme hook
-├── services/                # WebSocketService, MessageStorageService
-├── assets/                  # Images, fonts, and other assets
-└── backend/                 # Express + Socket.io + MongoDB API server
-    └── src/
-        ├── routes/          # auth, users, chats, messages
-        ├── models/          # User, Chat, Message (Mongoose)
-        ├── services/        # chatService, socketService (real-time messaging)
-        ├── middleware/      # JWT auth, rate limiters
-        ├── utils/           # validators, serializers, error handling
-        └── config/          # environment config, MongoDB connection
+## Build an APK to share
+
+**Quick, for friends on the same network or a test server over plain HTTP:** a debug APK.
+
+```bash
+cd android
+./gradlew assembleDebug -Ptextsy.debugApiUrl=http://YOUR-SERVER:3000
+# android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## 🔐 Authentication
+**Proper release build (HTTPS, smaller, signed):**
 
-The mobile client currently uses local mock authentication (AsyncStorage) for development: users can sign up, sign in, and use a mocked Google sign-in flow, all stored on-device.
+```bash
+# Once: create a signing key and keep it safe. Losing it means users must uninstall to update.
+keytool -genkeypair -v -keystore textsy.jks -alias textsy -keyalg RSA -keysize 2048 -validity 10000
 
-The backend implements real authentication: `POST /api/auth/register` and `POST /api/auth/login` (email or handle plus password) return a JWT, and every request and socket connection re-checks that the account exists and is not banned. Wiring the mobile client to these endpoints (replacing the mock) is the main remaining step.
+# Create android/keystore.properties (git-ignored):
+#   storeFile=/absolute/path/to/textsy.jks
+#   storePassword=...
+#   keyAlias=textsy
+#   keyPassword=...
 
-## 🎨 UI/UX Features
+cd android
+./gradlew assembleRelease -Ptextsy.apiUrl=https://api.your-domain.com
+# android/app/build/outputs/apk/release/app-release.apk
+```
 
-- **Responsive Design**: Optimized for all screen sizes
-- **Theme Support**: Light and dark mode with automatic switching
-- **Modern Components**: Clean, intuitive interface elements
-- **Accessibility**: Built with accessibility best practices
-- **Smooth Animations**: Engaging user interactions
+Release builds refuse to build without `-Ptextsy.apiUrl`, so an app that cannot connect is never produced by accident. The application id is `app.textsy`; it cannot be changed after the first release without users reinstalling, so decide before sharing a build.
 
-## 📊 Current Status
+## Tech stack
 
-### ✅ Completed (Phase 1)
-- [x] Project setup and configuration
-- [x] Authentication system (mock)
-- [x] User profile management
-- [x] Interest-based user discovery
-- [x] Chat interface structure
-- [x] Navigation and routing
-- [x] Theme system
-- [x] Basic UI components
+**Android:** Kotlin, Jetpack Compose (Material 3), Navigation Compose, ViewModel and StateFlow, Retrofit, OkHttp, kotlinx.serialization, the Socket.IO Java client, Android Keystore. Tested with JUnit, MockWebServer, Robolectric and Compose UI tests.
 
-### 🚧 In Progress (Phase 2)
-- [x] Backend API (Express, MongoDB, Socket.io) and real-time messaging service
-- [ ] Wiring the mobile client's auth flow to the backend's Firebase verification
-- [ ] Individual chat screens fully backed by persisted message history
+**Backend:** Node.js, Express, Socket.IO, MongoDB (Mongoose), bcrypt, JWT, Helmet, rate limiting. Tested with `node:test`, supertest and an in-memory MongoDB.
 
-### 📋 Planned (Phase 3 & 4)
-- [ ] User blocking and reporting
-- [ ] End-to-end encryption
-- [ ] Push notifications
-- [ ] Performance optimization
+## Privacy and safety
 
-## 🤝 Contributing
+- Email is used only to sign in and is never returned to other users. No phone number is collected.
+- Location is a self-declared area name, never coordinates.
+- Blocking hides two people from each other everywhere: discovery, search, profiles and chat.
+- The login session is encrypted on the device with a key that never leaves the Android Keystore.
+- Deleting an account removes it from the server and closes its conversations.
 
-We welcome contributions! Please follow these steps:
+## Status and known limitations
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+This is a pre-release. The Android app is verified by automated tests, including the real client against the real backend, but it has not yet been run on a physical device. Other limits:
 
-### Development Guidelines
-- Follow TypeScript best practices
-- Use consistent code formatting
-- Write meaningful commit messages
-- Test on both iOS and Android
-- Follow the existing component patterns
+- No push notifications; messages arrive while the app is open.
+- Chat history is not cached offline; unsent messages are queued and retried.
+- The Hindi translations are a first draft and should be reviewed by a native speaker.
+- The Android Gradle Plugin and AndroidX libraries are pinned to versions compatible with AGP 8.13; Android Studio can upgrade them.
 
-## 🐛 Known Issues
+## License
 
-- Mobile client still uses mock local authentication instead of the backend's email/password API
-- Limited offline functionality
-- No push notifications
-
-## 📱 Platform Support
-
-- ✅ iOS (iPhone, iPad)
-- ✅ Android
-- ✅ Web (basic support)
-
-## 🔒 Privacy & Security
-
-Textsy is built with privacy and security in mind:
-- User data is stored locally (will be encrypted in production)
-- No unnecessary permissions requested
-- Privacy controls for location and online status
-- User blocking and reporting features
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Built with [Expo](https://expo.dev/)
-- UI components inspired by modern design systems
-- Icons from [SF Symbols](https://developer.apple.com/sf-symbols/)
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/itswael/Textsy/issues)
-
----
-
-**Made with ❤️ for meaningful connections**
+MIT. See [LICENSE](LICENSE).
