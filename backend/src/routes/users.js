@@ -1,445 +1,185 @@
 import express from 'express';
-import { checkUserNotBanned, verifyToken } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
+import { createUserLimiter } from '../middleware/rateLimiters.js';
 import User from '../models/User.js';
+import { asyncHandler, badRequest, clampInt, escapeRegex, HttpError } from '../utils/http.js';
+import { publicUser, selfUser } from '../utils/serializers.js';
+import { validateCity, validateHandle } from '../utils/validators.js';
 
-const router = express.Router();
+const SEARCH_FIELDS = '-passwordHash -email';
 
-// Apply middleware to all routes
-router.use(verifyToken);
-router.use(checkUserNotBanned);
-
-// Get current user profile
-router.get('/profile', async (req, res) => {
-  try {
-    const { userId } = req.user;
-    
-    const user = await User.findById(userId).select('-blockedUsers -reportedBy');
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json({
-      success: true,
-      user: {
-        id: user._id,
-        firebaseUid: user.firebaseUid,
-        name: user.name,
-        email: user.email,
-        bio: user.bio,
-        interests: user.interests,
-        avatar: user.avatar,
-        location: user.location,
-        preferences: user.preferences,
-        isOnline: user.isOnline,
-        lastSeen: user.lastSeen,
-        isVerified: user.isVerified
-      }
-    });
-    
-  } catch (error) {
-    console.error('Get profile error:', error);
-    res.status(500).json({ error: 'Failed to fetch profile' });
-  }
+/** Users who are not currently suspended. A ban with a past expiry no longer counts. */
+const notBanned = () => ({
+  $or: [{ isBanned: { $ne: true } }, { banExpiresAt: { $lte: new Date() } }],
 });
 
-// Update user profile
-router.put('/profile', async (req, res) => {
-  try {
-    const { userId } = req.user;
-    const { name, bio, interests, avatar, location, preferences } = req.body;
-    
-    const updateData = {};
-    if (name) updateData.name = name;
-    if (bio !== undefined) updateData.bio = bio;
-    if (interests) updateData.interests = interests;
-    if (avatar) updateData.avatar = avatar;
-    if (location) updateData.location = location;
-    if (preferences) updateData.preferences = preferences;
-    
-    const user = await User.findByIdAndUpdate(
-      userId,
-      updateData,
-      { new: true, runValidators: true }
-    ).select('-blockedUsers -reportedBy');
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json({
-      success: true,
-      user: {
-        id: user._id,
-        firebaseUid: user.firebaseUid,
-        name: user.name,
-        email: user.email,
-        bio: user.bio,
-        interests: user.interests,
-        avatar: user.avatar,
-        location: user.location,
-        preferences: user.preferences,
-        isOnline: user.isOnline,
-        lastSeen: user.lastSeen,
-        isVerified: user.isVerified
-      }
-    });
-    
-  } catch (error) {
-    console.error('Update profile error:', error);
-    res.status(500).json({ error: 'Failed to update profile' });
-  }
-});
+export const createUserRouter = (config) => {
+  const router = express.Router();
+  router.use(requireAuth, createUserLimiter(config));
 
-// Get user discovery (potential matches)
-router.get('/discover', async (req, res) => {
-  try {
-    const { userId } = req.user;
-    const { 
-      interests, 
-      maxDistance = 50, 
-      limit = 20, 
-      skip = 0,
-      excludeBlocked = true 
-    } = req.query;
-    
-    // Get current user's preferences
-    const currentUser = await User.findById(userId);
-    if (!currentUser) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    // Build query
-    const query = {
-      _id: { $ne: userId },
-      isBanned: false
-    };
-    
-    // Filter by interests if provided
-    if (interests && interests.length > 0) {
-      query.interests = { $in: interests };
-    }
-    
-    // Filter by location if user has location sharing enabled
-    if (currentUser.preferences?.locationSharing && currentUser.location?.coordinates) {
-      query.location = {
-        $near: {
-          $geometry: {
-            type: 'Point',
-            coordinates: currentUser.location.coordinates
-          },
-          $maxDistance: (maxDistance || currentUser.preferences.maxDistance) * 1000 // Convert km to meters
+  router.get('/me', (req, res) => {
+    res.json({ success: true, user: selfUser(req.account) });
+  });
+
+  router.put(
+    '/me',
+    asyncHandler(async (req, res) => {
+      const body = req.body ?? {};
+      const account = req.account;
+
+      for (const field of ['displayName', 'bio', 'avatar', 'area']) {
+        if (body[field] !== undefined) {
+          if (typeof body[field] !== 'string') throw badRequest(`${field} must be text`);
+          account.set(field, body[field]);
         }
+      }
+      for (const field of ['interests', 'languages']) {
+        if (body[field] !== undefined) {
+          if (!Array.isArray(body[field])) throw badRequest(`${field} must be a list`);
+          account.set(field, body[field]);
+        }
+      }
+      if (body.city !== undefined) account.set('city', validateCity(body.city, config.cities));
+
+      if (body.preferences !== undefined) {
+        if (typeof body.preferences !== 'object' || body.preferences === null) {
+          throw badRequest('preferences must be an object');
+        }
+        for (const key of ['notifications', 'showOnlineStatus', 'showLastSeen']) {
+          if (body.preferences[key] !== undefined) {
+            if (typeof body.preferences[key] !== 'boolean') throw badRequest(`${key} must be true or false`);
+            account.set(`preferences.${key}`, body.preferences[key]);
+          }
+        }
+        if (body.preferences.language !== undefined) {
+          if (!['en', 'hi'].includes(body.preferences.language)) throw badRequest('Unsupported language');
+          account.set('preferences.language', body.preferences.language);
+        }
+      }
+
+      await account.save();
+      res.json({ success: true, user: selfUser(account) });
+    })
+  );
+
+  // People in my city, ranked by how many interests we share, then by recent activity.
+  router.get(
+    '/discover',
+    asyncHandler(async (req, res) => {
+      const me = req.account;
+      const limit = clampInt(req.query.limit, 1, 50, 20);
+      const skip = clampInt(req.query.skip, 0, 10_000, 0);
+
+      const match = {
+        $and: [
+          notBanned(),
+          {
+            _id: { $nin: [me._id, ...me.blockedUsers] },
+            blockedUsers: { $ne: me._id },
+            city: me.city,
+          },
+        ],
       };
-    }
-    
-    // Exclude blocked users
-    if (excludeBlocked === 'true' && currentUser.blockedUsers.length > 0) {
-      query._id = { $nin: currentUser.blockedUsers };
-    }
-    
-    const users = await User.find(query)
-      .select('name avatar bio interests location isOnline lastSeen')
-      .limit(parseInt(limit))
-      .skip(parseInt(skip))
-      .sort({ isOnline: -1, lastSeen: -1 });
-    
-    // Apply privacy settings
-    const filteredUsers = users.map(user => {
-      const filteredUser = { ...user.toObject() };
-      
-      if (!user.preferences?.privacy?.showOnlineStatus) {
-        filteredUser.isOnline = false;
+      if (typeof req.query.area === 'string' && req.query.area.trim()) {
+        match.$and.push({ area: req.query.area.trim() });
       }
-      
-      if (!user.preferences?.privacy?.showLastSeen) {
-        filteredUser.lastSeen = null;
+      if (typeof req.query.tag === 'string' && req.query.tag.trim()) {
+        match.$and.push({ interests: req.query.tag.trim().toLowerCase() });
       }
-      
-      if (!user.preferences?.privacy?.showLocation) {
-        filteredUser.location = null;
-      }
-      
-      return filteredUser;
-    });
-    
-    res.json({
-      success: true,
-      users: filteredUsers,
-      total: filteredUsers.length,
-      hasMore: filteredUsers.length === parseInt(limit)
-    });
-    
-  } catch (error) {
-    console.error('User discovery error:', error);
-    res.status(500).json({ error: 'Failed to fetch user discovery' });
-  }
-});
 
-// Search users
-router.get('/search', async (req, res) => {
-  try {
-    const { userId } = req.user;
-    const { q, limit = 20, skip = 0 } = req.query;
-    
-    if (!q || q.trim().length < 2) {
-      return res.status(400).json({ error: 'Search query must be at least 2 characters' });
-    }
-    
-    const currentUser = await User.findById(userId);
-    if (!currentUser) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    const query = {
-      _id: { $ne: userId },
-      isBanned: false,
-      $or: [
-        { name: { $regex: q, $options: 'i' } },
-        { bio: { $regex: q, $options: 'i' } },
-        { interests: { $in: [new RegExp(q, 'i')] } }
-      ]
-    };
-    
-    // Exclude blocked users
-    if (currentUser.blockedUsers.length > 0) {
-      query._id = { $nin: currentUser.blockedUsers };
-    }
-    
-    const users = await User.find(query)
-      .select('name avatar bio interests location isOnline lastSeen')
-      .limit(parseInt(limit))
-      .skip(parseInt(skip))
-      .sort({ isOnline: -1, lastSeen: -1 });
-    
-    // Apply privacy settings
-    const filteredUsers = users.map(user => {
-      const filteredUser = { ...user.toObject() };
-      
-      if (!user.preferences?.privacy?.showOnlineStatus) {
-        filteredUser.isOnline = false;
-      }
-      
-      if (!user.preferences?.privacy?.showLastSeen) {
-        filteredUser.lastSeen = null;
-      }
-      
-      if (!user.preferences?.privacy?.showLocation) {
-        filteredUser.location = null;
-      }
-      
-      return filteredUser;
-    });
-    
-    res.json({
-      success: true,
-      users: filteredUsers,
-      total: filteredUsers.length,
-      hasMore: filteredUsers.length === parseInt(limit)
-    });
-    
-  } catch (error) {
-    console.error('User search error:', error);
-    res.status(500).json({ error: 'Failed to search users' });
-  }
-});
+      const rows = await User.aggregate([
+        { $match: match },
+        { $addFields: { sharedCount: { $size: { $setIntersection: ['$interests', me.interests] } } } },
+        { $sort: { sharedCount: -1, lastSeen: -1, _id: -1 } },
+        { $skip: skip },
+        { $limit: limit + 1 },
+      ]);
 
-// Block user
-router.post('/block/:userId', async (req, res) => {
-  try {
-    const { userId: currentUserId } = req.user;
-    const { userId: targetUserId } = req.params;
-    
-    if (currentUserId === targetUserId) {
-      return res.status(400).json({ error: 'Cannot block yourself' });
-    }
-    
-    const currentUser = await User.findById(currentUserId);
-    if (!currentUser) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    const targetUser = await User.findById(targetUserId);
-    if (!targetUser) {
-      return res.status(404).json({ error: 'Target user not found' });
-    }
-    
-    await currentUser.blockUser(targetUserId);
-    
-    res.json({
-      success: true,
-      message: 'User blocked successfully'
-    });
-    
-  } catch (error) {
-    console.error('Block user error:', error);
-    res.status(500).json({ error: 'Failed to block user' });
-  }
-});
+      const hasMore = rows.length > limit;
+      const users = rows.slice(0, limit).map((row) => ({
+        ...publicUser(row),
+        sharedInterests: (row.interests || []).filter((interest) => me.interests.includes(interest)),
+      }));
 
-// Unblock user
-router.delete('/block/:userId', async (req, res) => {
-  try {
-    const { userId: currentUserId } = req.user;
-    const { userId: targetUserId } = req.params;
-    
-    const currentUser = await User.findById(currentUserId);
-    if (!currentUser) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    await currentUser.unblockUser(targetUserId);
-    
-    res.json({
-      success: true,
-      message: 'User unblocked successfully'
-    });
-    
-  } catch (error) {
-    console.error('Unblock user error:', error);
-    res.status(500).json({ error: 'Failed to unblock user' });
-  }
-});
+      res.json({ success: true, users, hasMore });
+    })
+  );
 
-// Get blocked users
-router.get('/blocked', async (req, res) => {
-  try {
-    const { userId } = req.user;
-    
-    const user = await User.findById(userId).populate('blockedUsers', 'name avatar');
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json({
-      success: true,
-      blockedUsers: user.blockedUsers
-    });
-    
-  } catch (error) {
-    console.error('Get blocked users error:', error);
-    res.status(500).json({ error: 'Failed to fetch blocked users' });
-  }
-});
+  router.get(
+    '/search',
+    asyncHandler(async (req, res) => {
+      const me = req.account;
+      const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase().replace(/^@/, '') : '';
+      if (q.length < 2 || q.length > 30) throw badRequest('Search must be 2-30 characters');
 
-// Report user
-router.post('/report/:userId', async (req, res) => {
-  try {
-    const { userId: reporterId } = req.user;
-    const { userId: reportedUserId } = req.params;
-    const { reason } = req.body;
-    
-    if (reporterId === reportedUserId) {
-      return res.status(400).json({ error: 'Cannot report yourself' });
-    }
-    
-    if (!reason || reason.trim().length < 10) {
-      return res.status(400).json({ error: 'Report reason must be at least 10 characters' });
-    }
-    
-    const reportedUser = await User.findById(reportedUserId);
-    if (!reportedUser) {
-      return res.status(404).json({ error: 'Reported user not found' });
-    }
-    
-    // Check if already reported
-    const existingReport = reportedUser.reportedBy.find(
-      report => report.user.toString() === reporterId
-    );
-    
-    if (existingReport) {
-      return res.status(400).json({ error: 'User already reported' });
-    }
-    
-    reportedUser.reportedBy.push({
-      user: reporterId,
-      reason: reason.trim()
-    });
-    
-    await reportedUser.save();
-    
-    res.json({
-      success: true,
-      message: 'User reported successfully'
-    });
-    
-  } catch (error) {
-    console.error('Report user error:', error);
-    res.status(500).json({ error: 'Failed to report user' });
-  }
-});
+      const safe = escapeRegex(q);
+      const users = await User.find({
+        $and: [
+          notBanned(),
+          {
+            _id: { $nin: [me._id, ...me.blockedUsers] },
+            blockedUsers: { $ne: me._id },
+            $or: [{ handle: new RegExp(`^${safe}`) }, { displayName: new RegExp(safe, 'i') }, { interests: q }],
+          },
+        ],
+      })
+        .select(SEARCH_FIELDS)
+        .sort({ lastSeen: -1 })
+        .limit(clampInt(req.query.limit, 1, 50, 20));
 
-// Update user preferences
-router.put('/preferences', async (req, res) => {
-  try {
-    const { userId } = req.user;
-    const preferences = req.body;
-    
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { preferences },
-      { new: true, runValidators: true }
-    ).select('-blockedUsers -reportedBy');
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json({
-      success: true,
-      preferences: user.preferences
-    });
-    
-  } catch (error) {
-    console.error('Update preferences error:', error);
-    res.status(500).json({ error: 'Failed to update preferences' });
-  }
-});
+      res.json({ success: true, users: users.map(publicUser) });
+    })
+  );
 
-// Get user by ID (public info only)
-router.get('/:userId', async (req, res) => {
-  try {
-    const { userId: currentUserId } = req.user;
-    const { userId: targetUserId } = req.params;
-    
-    if (currentUserId === targetUserId) {
-      return res.status(400).json({ error: 'Use /profile endpoint for your own profile' });
-    }
-    
-    const targetUser = await User.findById(targetUserId).select('name avatar bio interests location isOnline lastSeen');
-    if (!targetUser) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    // Check if current user is blocked by target user
-    const currentUser = await User.findById(currentUserId);
-    if (currentUser && currentUser.blockedUsers.includes(targetUserId)) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-    
-    // Apply privacy settings
-    if (!targetUser.preferences?.privacy?.showOnlineStatus) {
-      targetUser.isOnline = false;
-    }
-    
-    if (!targetUser.preferences?.privacy?.showLastSeen) {
-      targetUser.lastSeen = null;
-    }
-    
-    if (!targetUser.preferences?.privacy?.showLocation) {
-      targetUser.location = null;
-    }
-    
-    res.json({
-      success: true,
-      user: targetUser
-    });
-    
-  } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({ error: 'Failed to fetch user' });
-  }
-});
+  router.get(
+    '/blocked',
+    asyncHandler(async (req, res) => {
+      const users = await User.find({ _id: { $in: req.account.blockedUsers } }).select(SEARCH_FIELDS);
+      res.json({ success: true, users: users.map(publicUser) });
+    })
+  );
 
-export default router;
+  const findTarget = async (me, rawHandle) => {
+    const target = await User.findOne({ handle: validateHandle(rawHandle) });
+    if (!target || String(target._id) === String(me._id)) throw new HttpError(404, 'User not found');
+    return target;
+  };
 
+  router.post(
+    '/:handle/block',
+    asyncHandler(async (req, res) => {
+      const target = await findTarget(req.account, req.params.handle);
+      await User.updateOne({ _id: req.account._id }, { $addToSet: { blockedUsers: target._id } });
+      res.json({ success: true });
+    })
+  );
 
+  router.delete(
+    '/:handle/block',
+    asyncHandler(async (req, res) => {
+      const target = await findTarget(req.account, req.params.handle);
+      await User.updateOne({ _id: req.account._id }, { $pull: { blockedUsers: target._id } });
+      res.json({ success: true });
+    })
+  );
+
+  // Public profile. Anyone who blocked me, or whom I blocked, simply does not exist.
+  router.get(
+    '/:handle',
+    asyncHandler(async (req, res) => {
+      const me = req.account;
+      const target = await User.findOne({ handle: validateHandle(req.params.handle) }).select(SEARCH_FIELDS);
+
+      const hidden =
+        !target ||
+        target.isBannedNow() ||
+        target.blockedUsers.some((id) => String(id) === String(me._id)) ||
+        me.blockedUsers.some((id) => String(id) === String(target._id));
+      if (hidden) throw new HttpError(404, 'User not found');
+
+      res.json({ success: true, user: publicUser(target) });
+    })
+  );
+
+  return router;
+};

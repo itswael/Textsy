@@ -1,252 +1,118 @@
+import bcrypt from 'bcryptjs';
 import express from 'express';
-import jwt from 'jsonwebtoken';
-import admin from '../config/firebase.js';
-import { verifyFirebaseToken } from '../middleware/auth.js';
+import { requireAuth, signToken } from '../middleware/auth.js';
+import { createAuthLimiter, createUserLimiter } from '../middleware/rateLimiters.js';
+import Chat from '../models/Chat.js';
+import Message from '../models/Message.js';
 import User from '../models/User.js';
+import { asyncHandler, badRequest, HttpError } from '../utils/http.js';
+import { selfUser } from '../utils/serializers.js';
+import {
+  requireString,
+  validateCity,
+  validateEmail,
+  validateHandle,
+  validatePassword,
+} from '../utils/validators.js';
 
-const router = express.Router();
+// Compared against when the account does not exist, so response time does not
+// reveal whether an email or handle is registered.
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 10);
 
-// Verify Firebase token and create/update user
-router.post('/verify', async (req, res) => {
-  try {
-    const { idToken } = req.body;
-    
-    if (!idToken) {
-      return res.status(400).json({ error: 'Firebase ID token is required' });
-    }
+export const createAuthRouter = (config) => {
+  const router = express.Router();
+  const authLimiter = createAuthLimiter(config);
+  const userLimiter = createUserLimiter(config);
 
-    // Verify Firebase token
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-    const { uid, email, name } = decodedToken;
+  router.post(
+    '/register',
+    authLimiter,
+    asyncHandler(async (req, res) => {
+      const body = req.body ?? {};
 
-    // Find or create user
-    let user = await User.findOne({ firebaseUid: uid });
-    
-    if (!user) {
-      // Create new user
-      user = new User({
-        firebaseUid: uid,
-        email: email || '',
-        name: name || 'User',
-        bio: '',
-        interests: [],
-        isOnline: true,
-        lastSeen: new Date(),
-        preferences: {
-          notifications: true,
-          location: false,
-          showOnlineStatus: true,
-          showLastSeen: true
+      if (config.inviteCodes.length > 0) {
+        const code = typeof body.inviteCode === 'string' ? body.inviteCode.trim() : '';
+        if (!config.inviteCodes.includes(code)) {
+          throw new HttpError(403, 'A valid invite code is required', 'invite_required');
         }
+      }
+      if (body.ageConfirmed !== true) throw badRequest('You must confirm that you are 18 or older');
+
+      const email = validateEmail(body.email);
+      const handle = validateHandle(body.handle);
+      const password = validatePassword(body.password);
+      const city = validateCity(body.city ?? config.cities[0], config.cities);
+
+      const [emailTaken, handleTaken] = await Promise.all([User.exists({ email }), User.exists({ handle })]);
+      if (emailTaken) throw new HttpError(409, 'An account with this email already exists', 'email_taken');
+      if (handleTaken) throw new HttpError(409, 'That handle is already taken', 'handle_taken');
+
+      const user = await User.create({
+        email,
+        handle,
+        passwordHash: await User.hashPassword(password),
+        displayName: typeof body.displayName === 'string' ? body.displayName : '',
+        bio: typeof body.bio === 'string' ? body.bio : '',
+        interests: Array.isArray(body.interests) ? body.interests : [],
+        languages: Array.isArray(body.languages) ? body.languages : [],
+        area: typeof body.area === 'string' ? body.area : '',
+        city,
+        ageConfirmed: true,
+        preferences: { language: body.language === 'hi' ? 'hi' : 'en' },
       });
-      await user.save();
-    } else {
-      // Update existing user's online status
-      user.isOnline = true;
-      user.lastSeen = new Date();
-      await user.save();
-    }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { uid: user._id, firebaseUid: uid },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+      res.status(201).json({ success: true, token: signToken(user), user: selfUser(user) });
+    })
+  );
 
-    res.json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        firebaseUid: user.firebaseUid,
-        name: user.name,
-        email: user.email,
-        bio: user.bio,
-        interests: user.interests,
-        avatar: user.avatar,
-        isOnline: user.isOnline,
-        preferences: user.preferences
-      }
-    });
+  router.post(
+    '/login',
+    authLimiter,
+    asyncHandler(async (req, res) => {
+      const identifier = requireString(req.body?.identifier ?? req.body?.email, 'Email or handle')
+        .trim()
+        .toLowerCase()
+        .replace(/^@/, '');
+      const password = requireString(req.body?.password, 'Password');
 
-  } catch (error) {
-    console.error('Auth verification error:', error);
-    
-    if (error.code === 'auth/id-token-expired') {
-      return res.status(401).json({ error: 'Token expired. Please login again.' });
-    }
-    
-    if (error.code === 'auth/id-token-revoked') {
-      return res.status(401).json({ error: 'Token revoked. Please login again.' });
-    }
-    
-    res.status(500).json({ error: 'Authentication failed' });
-  }
-});
+      const query = identifier.includes('@') ? { email: identifier } : { handle: identifier };
+      const user = await User.findOne(query).select('+passwordHash');
 
-// Refresh JWT token
-router.post('/refresh', verifyFirebaseToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+      const passwordOk = user ? await user.verifyPassword(password) : await bcrypt.compare(password, DUMMY_HASH);
+      if (!user || !passwordOk) throw new HttpError(401, 'Incorrect email/handle or password');
 
-    const token = jwt.sign(
-      { uid: user._id, firebaseUid: user.firebaseUid },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+      if (user.isBannedNow()) throw new HttpError(403, 'This account is suspended', 'banned');
 
-    res.json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        firebaseUid: user.firebaseUid,
-        name: user.name,
-        email: user.email,
-        bio: user.bio,
-        interests: user.interests,
-        avatar: user.avatar,
-        isOnline: user.isOnline,
-        preferences: user.preferences
-      }
-    });
+      res.json({ success: true, token: signToken(user), user: selfUser(user) });
+    })
+  );
 
-  } catch (error) {
-    console.error('Token refresh error:', error);
-    res.status(500).json({ error: 'Token refresh failed' });
-  }
-});
-
-// Google Sign-In (alternative endpoint)
-router.post('/google', async (req, res) => {
-  try {
-    const { idToken } = req.body;
-    
-    if (!idToken) {
-      return res.status(400).json({ error: 'Google ID token is required' });
-    }
-
-    // Verify Google token
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-    const { uid, email, name, picture } = decodedToken;
-
-    // Find or create user
-    let user = await User.findOne({ firebaseUid: uid });
-    
-    if (!user) {
-      user = new User({
-        firebaseUid: uid,
-        email: email || '',
-        name: name || 'User',
-        bio: '',
-        interests: [],
-        avatar: picture || '',
-        isOnline: true,
-        lastSeen: new Date(),
-        preferences: {
-          notifications: true,
-          location: false,
-          showOnlineStatus: true,
-          showLastSeen: true
-        }
-      });
-      await user.save();
-    } else {
-      user.isOnline = true;
-      user.lastSeen = new Date();
-      if (picture && !user.avatar) {
-        user.avatar = picture;
-      }
-      await user.save();
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { uid: user._id, firebaseUid: uid },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        firebaseUid: user.firebaseUid,
-        name: user.name,
-        email: user.email,
-        bio: user.bio,
-        interests: user.interests,
-        avatar: user.avatar,
-        isOnline: user.isOnline,
-        preferences: user.preferences
-      }
-    });
-
-  } catch (error) {
-    console.error('Google auth error:', error);
-    res.status(500).json({ error: 'Google authentication failed' });
-  }
-});
-
-// Logout
-router.post('/logout', verifyFirebaseToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.userId);
-    if (user) {
-      user.isOnline = false;
-      user.lastSeen = new Date();
-      await user.save();
-    }
-
-    res.json({ success: true, message: 'Logged out successfully' });
-  } catch (error) {
-    console.error('Logout error:', error);
-    res.status(500).json({ error: 'Logout failed' });
-  }
-});
-
-// Verify JWT token
-router.get('/verify-token', verifyFirebaseToken, (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Token is valid',
-    user: req.user 
+  router.get('/me', requireAuth, userLimiter, (req, res) => {
+    res.json({ success: true, user: selfUser(req.account) });
   });
-});
 
-// Get user profile by Firebase UID
-router.get('/profile/:firebaseUid', async (req, res) => {
-  try {
-    const { firebaseUid } = req.params;
-    const user = await User.findOne({ firebaseUid }).select('-blockedUsers -reportedBy');
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+  // Permanently deletes the account. Requires the password as confirmation.
+  router.delete(
+    '/me',
+    requireAuth,
+    userLimiter,
+    asyncHandler(async (req, res) => {
+      const password = requireString(req.body?.password, 'Password');
+      const account = await User.findById(req.userId).select('+passwordHash');
+      if (!(await account.verifyPassword(password))) throw new HttpError(401, 'Incorrect password');
 
-    res.json({
-      success: true,
-      user: {
-        id: user._id,
-        name: user.name,
-        bio: user.bio,
-        interests: user.interests,
-        avatar: user.avatar,
-        isOnline: user.isOnline,
-        lastSeen: user.lastSeen,
-        isVerified: user.isVerified
-      }
-    });
+      const userId = account._id;
+      await Message.updateMany({ sender: userId }, { $set: { text: '[deleted]', deletedAt: new Date() } });
+      await Chat.updateMany({ participants: userId }, { $set: { isActive: false } });
+      await User.updateMany({ blockedUsers: userId }, { $pull: { blockedUsers: userId } });
+      await User.deleteOne({ _id: userId });
 
-  } catch (error) {
-    console.error('Profile fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch profile' });
-  }
-});
+      // Drop any live connections for this account.
+      req.app.get('io')?.in(`user:${userId}`).disconnectSockets(true);
 
-export default router;
+      res.json({ success: true, message: 'Account deleted' });
+    })
+  );
+
+  return router;
+};

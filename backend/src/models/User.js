@@ -1,207 +1,81 @@
+import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 
-const userSchema = new mongoose.Schema({
-  firebaseUid: {
-    type: String,
-    required: true,
-    unique: true
-  },
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 50
-  },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    trim: true
-  },
-  bio: {
-    type: String,
-    maxlength: 500,
-    default: ''
-  },
-  interests: [{
-    type: String,
-    trim: true,
-    maxlength: 20
-  }],
-  location: {
-    type: {
+export const HANDLE_REGEX = /^[a-z0-9_.]{3,20}$/;
+export const MAX_INTERESTS = 10;
+export const MAX_LANGUAGES = 5;
+
+const normalizeList = (value) =>
+  Array.isArray(value)
+    ? [...new Set(value.map((item) => String(item).trim().toLowerCase()).filter(Boolean))]
+    : value;
+
+const userSchema = new mongoose.Schema(
+  {
+    handle: {
       type: String,
-      enum: ['Point'],
-      default: 'Point'
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      match: [HANDLE_REGEX, 'Handle must be 3-20 characters: letters, numbers, dot or underscore'],
     },
-    coordinates: {
-      type: [Number],
-      default: [0, 0]
-    },
-    city: String,
-    country: String
-  },
-  avatar: {
-    type: String,
-    default: '👤'
-  },
-  isOnline: {
-    type: Boolean,
-    default: false
-  },
-  lastSeen: {
-    type: Date,
-    default: Date.now
-  },
-  preferences: {
-    notifications: {
-      type: Boolean,
-      default: true
-    },
-    locationSharing: {
-      type: Boolean,
-      default: false
-    },
-    maxDistance: {
-      type: Number,
-      default: 50, // km
-      min: 1,
-      max: 1000
-    },
-    ageRange: {
-      min: {
-        type: Number,
-        default: 18,
-        min: 18
+    displayName: { type: String, trim: true, maxlength: [50, 'Name is too long (max 50)'], default: '' },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    passwordHash: { type: String, required: true, select: false },
+    bio: { type: String, trim: true, maxlength: [160, 'Bio is too long (max 160)'], default: '' },
+    avatar: { type: String, trim: true, maxlength: [16, 'Avatar is too long'], default: '🙂' },
+    interests: {
+      type: [{ type: String, trim: true, lowercase: true, maxlength: [20, 'Interest is too long (max 20)'] }],
+      set: normalizeList,
+      validate: {
+        validator: (list) => list.length <= MAX_INTERESTS,
+        message: `At most ${MAX_INTERESTS} interests`,
       },
-      max: {
-        type: Number,
-        default: 100,
-        max: 100
-      }
+      default: [],
     },
-    privacy: {
-      showOnlineStatus: {
-        type: Boolean,
-        default: true
+    languages: {
+      type: [{ type: String, lowercase: true, match: [/^[a-z]{2,3}$/, 'Invalid language code'] }],
+      set: normalizeList,
+      validate: {
+        validator: (list) => list.length <= MAX_LANGUAGES,
+        message: `At most ${MAX_LANGUAGES} languages`,
       },
-      showLastSeen: {
-        type: Boolean,
-        default: true
-      },
-      showLocation: {
-        type: Boolean,
-        default: false
-      }
-    }
-  },
-  blockedUsers: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  reportedBy: [{
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
+      default: [],
     },
-    reason: String,
-    reportedAt: {
-      type: Date,
-      default: Date.now
-    }
-  }],
-  isVerified: {
-    type: Boolean,
-    default: false
+    city: { type: String, required: true, trim: true },
+    area: { type: String, trim: true, maxlength: [40, 'Area is too long (max 40)'], default: '' },
+    ageConfirmed: { type: Boolean, required: true },
+    preferences: {
+      language: { type: String, enum: ['en', 'hi'], default: 'en' },
+      notifications: { type: Boolean, default: true },
+      showOnlineStatus: { type: Boolean, default: true },
+      showLastSeen: { type: Boolean, default: true },
+    },
+    blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    isOnline: { type: Boolean, default: false },
+    lastSeen: { type: Date, default: Date.now },
+    isBanned: { type: Boolean, default: false },
+    banReason: { type: String, default: '' },
+    banExpiresAt: Date,
+    isAdmin: { type: Boolean, default: false },
   },
-  isBanned: {
-    type: Boolean,
-    default: false
-  },
-  banReason: String,
-  banExpiresAt: Date
-}, {
-  timestamps: true
-});
+  { timestamps: true }
+);
 
-// Indexes for efficient querying
-userSchema.index({ location: '2dsphere' });
+userSchema.index({ city: 1, area: 1 });
 userSchema.index({ interests: 1 });
-userSchema.index({ firebaseUid: 1 });
-userSchema.index({ email: 1 });
-userSchema.index({ isOnline: 1, lastSeen: -1 });
-userSchema.index({ isBanned: 1 });
 
-// Virtual for age calculation (if you store birthDate)
-userSchema.virtual('age').get(function() {
-  // Implementation depends on whether you store birthDate
-  return null;
-});
+userSchema.statics.hashPassword = (password) => bcrypt.hash(password, 10);
 
-// Method to update online status
-userSchema.methods.updateOnlineStatus = function(isOnline) {
-  this.isOnline = isOnline;
-  this.lastSeen = new Date();
-  return this.save();
+userSchema.methods.verifyPassword = function verifyPassword(password) {
+  return bcrypt.compare(password, this.passwordHash);
 };
 
-// Method to add interest
-userSchema.methods.addInterest = function(interest) {
-  if (!this.interests.includes(interest) && this.interests.length < 10) {
-    this.interests.push(interest);
-    return this.save();
-  }
-  return Promise.resolve(this);
-};
-
-// Method to remove interest
-userSchema.methods.removeInterest = function(interest) {
-  this.interests = this.interests.filter(i => i !== interest);
-  return this.save();
-};
-
-// Method to block user
-userSchema.methods.blockUser = function(userId) {
-  if (!this.blockedUsers.includes(userId)) {
-    this.blockedUsers.push(userId);
-    return this.save();
-  }
-  return Promise.resolve(this);
-};
-
-// Method to unblock user
-userSchema.methods.unblockUser = function(userId) {
-  this.blockedUsers = this.blockedUsers.filter(id => id.toString() !== userId.toString());
-  return this.save();
-};
-
-// Static method to find users by interests
-userSchema.statics.findByInterests = function(interests, limit = 20) {
-  return this.find({
-    interests: { $in: interests },
-    isBanned: false
-  })
-  .select('name avatar interests location bio isOnline lastSeen')
-  .limit(limit);
-};
-
-// Static method to find nearby users
-userSchema.statics.findNearby = function(coordinates, maxDistance = 50) {
-  return this.find({
-    location: {
-      $near: {
-        $geometry: {
-          type: 'Point',
-          coordinates: coordinates
-        },
-        $maxDistance: maxDistance * 1000 // Convert km to meters
-      }
-    },
-    isBanned: false
-  })
-  .select('name avatar interests location bio isOnline lastSeen')
-  .limit(20);
+/** A ban is active when flagged and either permanent or not yet expired. */
+userSchema.methods.isBannedNow = function isBannedNow() {
+  if (!this.isBanned) return false;
+  return !this.banExpiresAt || this.banExpiresAt > new Date();
 };
 
 export default mongoose.model('User', userSchema);

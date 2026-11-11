@@ -1,222 +1,57 @@
 import mongoose from 'mongoose';
 
-const chatSchema = new mongoose.Schema({
-  participants: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  }],
-  type: {
-    type: String,
-    enum: ['direct', 'group'],
-    default: 'direct'
+export const pairKeyFor = (userA, userB) => [String(userA), String(userB)].sort().join(':');
+
+// Snapshot of the newest message, embedded so the chat list needs no extra query.
+const lastMessageSchema = new mongoose.Schema(
+  {
+    messageId: { type: mongoose.Schema.Types.ObjectId, ref: 'Message' },
+    text: String,
+    sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    createdAt: Date,
   },
-  lastMessage: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Message'
+  { _id: false }
+);
+
+const chatSchema = new mongoose.Schema(
+  {
+    participants: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+      validate: {
+        validator: (ids) => ids.length === 2 && String(ids[0]) !== String(ids[1]),
+        message: 'A chat needs exactly two different participants',
+      },
+    },
+    // Sorted "idA:idB". The unique index makes duplicate chats impossible, even under races.
+    pairKey: { type: String, required: true, unique: true },
+    lastMessage: { type: lastMessageSchema, default: undefined },
+    // userId -> unread message count for that user.
+    unread: { type: Map, of: Number, default: () => ({}) },
+    lastReadAt: { type: Map, of: Date, default: () => ({}) },
+    isActive: { type: Boolean, default: true },
   },
-  unreadCounts: {
-    type: Map,
-    of: Number,
-    default: new Map()
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  metadata: {
-    createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    groupName: String,
-    groupAvatar: String,
-    groupDescription: String,
-    groupRules: [String]
-  },
-  settings: {
-    allowInvites: {
-      type: Boolean,
-      default: true
-    },
-    readReceipts: {
-      type: Boolean,
-      default: true
-    },
-    typingIndicators: {
-      type: Boolean,
-      default: true
-    }
-  },
-  pinnedMessages: [{
-    message: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Message'
-    },
-    pinnedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    pinnedAt: {
-      type: Date,
-      default: Date.now
-    }
-  }],
-  archivedBy: [{
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    archivedAt: {
-      type: Date,
-      default: Date.now
-    }
-  }]
-}, {
-  timestamps: true
-});
+  { timestamps: true }
+);
 
-// Indexes for efficient querying
-chatSchema.index({ participants: 1 });
-chatSchema.index({ type: 1 });
-chatSchema.index({ lastMessage: 1 });
-chatSchema.index({ updatedAt: -1 });
-chatSchema.index({ 'archivedBy.user': 1 });
+chatSchema.index({ participants: 1, updatedAt: -1 });
 
-// Ensure only 2 participants for direct chats
-chatSchema.pre('save', function(next) {
-  if (this.type === 'direct' && this.participants.length !== 2) {
-    return next(new Error('Direct chats must have exactly 2 participants'));
-  }
-  next();
-});
+/** Finds the direct chat between two users, creating it if it does not exist. */
+chatSchema.statics.getOrCreateDirect = async function getOrCreateDirect(userA, userB) {
+  const pairKey = pairKeyFor(userA, userB);
+  const existing = await this.findOne({ pairKey });
+  if (existing) return existing;
 
-// Method to add participant (for group chats)
-chatSchema.methods.addParticipant = function(userId) {
-  if (this.type === 'group' && !this.participants.includes(userId)) {
-    this.participants.push(userId);
-    this.unreadCounts.set(userId.toString(), 0);
-    return this.save();
-  }
-  return Promise.resolve(this);
-};
-
-// Method to remove participant (for group chats)
-chatSchema.methods.removeParticipant = function(userId) {
-  if (this.type === 'group') {
-    this.participants = this.participants.filter(id => id.toString() !== userId.toString());
-    this.unreadCounts.delete(userId.toString());
-    return this.save();
-  }
-  return Promise.resolve(this);
-};
-
-// Method to update unread count
-chatSchema.methods.updateUnreadCount = function(userId, increment = 1) {
-  const currentCount = this.unreadCounts.get(userId.toString()) || 0;
-  this.unreadCounts.set(userId.toString(), Math.max(0, currentCount + increment));
-  return this.save();
-};
-
-// Method to reset unread count
-chatSchema.methods.resetUnreadCount = function(userId) {
-  this.unreadCounts.set(userId.toString(), 0);
-  return this.save();
-};
-
-// Method to archive chat for user
-chatSchema.methods.archiveForUser = function(userId) {
-  const existingArchive = this.archivedBy.find(archive => 
-    archive.user.toString() === userId.toString()
-  );
-  
-  if (!existingArchive) {
-    this.archivedBy.push({ user: userId });
-    return this.save();
-  }
-  return Promise.resolve(this);
-};
-
-// Method to unarchive chat for user
-chatSchema.methods.unarchiveForUser = function(userId) {
-  this.archivedBy = this.archivedBy.filter(archive => 
-    archive.user.toString() !== userId.toString()
-  );
-  return this.save();
-};
-
-// Method to pin message
-chatSchema.methods.pinMessage = function(messageId, userId) {
-  const existingPin = this.pinnedMessages.find(pin => 
-    pin.message.toString() === messageId.toString()
-  );
-  
-  if (!existingPin) {
-    this.pinnedMessages.push({
-      message: messageId,
-      pinnedBy: userId
+  try {
+    return await this.create({
+      participants: [userA, userB],
+      pairKey,
+      unread: { [String(userA)]: 0, [String(userB)]: 0 },
     });
-    return this.save();
+  } catch (error) {
+    // Another request created it between our read and write.
+    if (error.code === 11000) return this.findOne({ pairKey });
+    throw error;
   }
-  return Promise.resolve(this);
 };
-
-// Method to unpin message
-chatSchema.methods.unpinMessage = function(messageId) {
-  this.pinnedMessages = this.pinnedMessages.filter(pin => 
-    pin.message.toString() !== messageId.toString()
-  );
-  return this.save();
-};
-
-// Static method to find chats by participant
-chatSchema.statics.findByParticipant = function(userId, options = {}) {
-  const query = {
-    participants: userId,
-    isActive: true
-  };
-  
-  if (options.excludeArchived) {
-    query['archivedBy.user'] = { $ne: userId };
-  }
-  
-  return this.find(query)
-    .populate('participants', 'name avatar isOnline lastSeen')
-    .populate('lastMessage', 'content sender createdAt')
-    .populate('metadata.createdBy', 'name avatar')
-    .sort({ updatedAt: -1 });
-};
-
-// Static method to find direct chat between two users
-chatSchema.statics.findDirectChat = function(userId1, userId2) {
-  return this.findOne({
-    type: 'direct',
-    participants: { $all: [userId1, userId2] },
-    isActive: true
-  });
-};
-
-// Static method to create direct chat
-chatSchema.statics.createDirectChat = function(userId1, userId2) {
-  return this.create({
-    type: 'direct',
-    participants: [userId1, userId2],
-    unreadCounts: new Map([
-      [userId1.toString(), 0],
-      [userId2.toString(), 0]
-    ])
-  });
-};
-
-// Virtual for total unread count
-chatSchema.virtual('totalUnreadCount').get(function() {
-  let total = 0;
-  for (const count of this.unreadCounts.values()) {
-    total += count;
-  }
-  return total;
-});
 
 export default mongoose.model('Chat', chatSchema);
-
-
