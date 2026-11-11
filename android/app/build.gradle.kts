@@ -57,6 +57,11 @@ android {
     }
 }
 
+// Integration tests only run when TEXTSY_API_URL is set; re-run them whenever it changes.
+tasks.withType<Test>().configureEach {
+    inputs.property("textsyApiUrl", providers.environmentVariable("TEXTSY_API_URL").orElse(""))
+}
+
 kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
@@ -87,10 +92,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.androidx.datastore.preferences)
 
     implementation(libs.okhttp)
-    debugImplementation(libs.okhttp.logging)
+    implementation(libs.okhttp.logging)
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization)
     implementation(libs.kotlinx.serialization.json)
