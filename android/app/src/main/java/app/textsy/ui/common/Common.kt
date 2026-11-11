@@ -33,16 +33,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import app.textsy.AppContainer
+import app.textsy.AppDependencies
 import app.textsy.R
 import app.textsy.data.remote.ApiException
 import java.util.Locale
 
-val LocalContainer = staticCompositionLocalOf<AppContainer> { error("AppContainer not provided") }
+val LocalContainer = staticCompositionLocalOf<AppDependencies> { error("AppDependencies not provided") }
 
 /** Creates a ViewModel that can reach the app's repositories. */
 @Composable
-inline fun <reified VM : ViewModel> appViewModel(key: String? = null, crossinline create: (AppContainer) -> VM): VM {
+inline fun <reified VM : ViewModel> appViewModel(key: String? = null, crossinline create: (AppDependencies) -> VM): VM {
     val container = LocalContainer.current
     return viewModel(key = key, factory = viewModelFactory { initializer { create(container) } })
 }

@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
  * Builds and wires the app's long-lived objects by hand (no DI framework: there are few of them).
  * Created once by [TextsyApp] and reached from the UI through [LocalContainer].
  */
-class AppContainer(context: Context) {
+class AppContainer(context: Context) : AppDependencies {
     private val json = Network.json()
     private val session = SessionHolder()
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -32,9 +32,9 @@ class AppContainer(context: Context) {
         json = json,
     )
 
-    val auth = AuthRepository(api, KeystoreSessionStore(context, json), json, session)
-    val people = PeopleRepository(api, json)
-    val chats = ChatRepository(api, SocketIoChatSocket(BuildConfig.API_BASE_URL, json), json, appScope)
+    override val auth = AuthRepository(api, KeystoreSessionStore(context, json), json, session)
+    override val people = PeopleRepository(api, json)
+    override val chats = ChatRepository(api, SocketIoChatSocket(BuildConfig.API_BASE_URL, json), json, appScope)
 
     init {
         // The server says the session is no longer valid: sign out and show the login screen.
