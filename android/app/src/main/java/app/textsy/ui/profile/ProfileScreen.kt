@@ -29,6 +29,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -39,11 +41,13 @@ import app.textsy.R
 import app.textsy.data.model.PreferencesPatch
 import app.textsy.data.model.UpdateProfileRequest
 import app.textsy.data.remote.ApiException
+import app.textsy.data.repo.AuthRepository
 import app.textsy.data.repo.SessionState
 import app.textsy.ui.common.Avatar
 import app.textsy.ui.common.ErrorLine
 import app.textsy.ui.common.LanguageToggle
 import app.textsy.ui.common.LocalContainer
+import app.textsy.ui.common.appViewModel
 import app.textsy.ui.common.userMessage
 import kotlinx.coroutines.launch
 
@@ -153,50 +157,74 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
     }
 }
 
+/** State and rules for the delete-account dialog, kept out of the composable so they can be tested on their own. */
+class DeleteAccountViewModel(private val auth: AuthRepository) : ViewModel() {
+    var password by mutableStateOf("")
+        private set
+    var busy by mutableStateOf(false)
+        private set
+    var error by mutableStateOf<ApiException?>(null)
+        private set
+
+    val canSubmit: Boolean get() = password.isNotEmpty() && !busy
+
+    fun onPasswordChange(value: String) {
+        password = value
+        error = null
+    }
+
+    /** Forgets what was typed. Called when the dialog is closed so a password never lingers. */
+    fun reset() {
+        if (busy) return
+        password = ""
+        error = null
+    }
+
+    /** Asks the server to delete the account. On success the session ends and the app returns to sign-in. */
+    fun submit() {
+        if (!canSubmit) return
+        viewModelScope.launch {
+            busy = true
+            error = null
+            try {
+                auth.deleteAccount(password)
+            } catch (e: ApiException) {
+                error = e // a wrong password keeps the person signed in so they can try again
+            } finally {
+                busy = false
+            }
+        }
+    }
+}
+
 @Composable
 private fun DeleteAccountDialog(onDismiss: () -> Unit) {
-    val container = LocalContainer.current
-    val scope = rememberCoroutineScope()
-    var password by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<ApiException?>(null) }
+    val vm = appViewModel(key = "delete-account") { DeleteAccountViewModel(it.auth) }
+    val dismiss = { vm.reset(); onDismiss() }
 
     AlertDialog(
-        onDismissRequest = { if (!busy) onDismiss() },
+        onDismissRequest = { if (!vm.busy) dismiss() },
         title = { Text(stringResource(R.string.delete_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.delete_body))
                 OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
+                    value = vm.password,
+                    onValueChange = vm::onPasswordChange,
                     label = { Text(stringResource(R.string.field_password)) },
                     singleLine = true,
-                    isError = error != null,
+                    isError = vm.error != null,
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                ErrorLine(error?.userMessage())
+                ErrorLine(vm.error?.userMessage())
             }
         },
         confirmButton = {
-            TextButton(
-                enabled = password.isNotEmpty() && !busy,
-                onClick = {
-                    scope.launch {
-                        busy = true
-                        error = null
-                        try {
-                            container.auth.deleteAccount(password) // signs out on success
-                        } catch (e: ApiException) {
-                            error = e
-                        } finally {
-                            busy = false
-                        }
-                    }
-                },
-            ) { Text(stringResource(R.string.delete_confirm), color = MaterialTheme.colorScheme.error) }
+            TextButton(enabled = vm.canSubmit, onClick = vm::submit) {
+                Text(stringResource(R.string.delete_confirm), color = MaterialTheme.colorScheme.error)
+            }
         },
-        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
+        dismissButton = { TextButton(enabled = !vm.busy, onClick = dismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }

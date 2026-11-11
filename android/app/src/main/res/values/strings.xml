@@ -51,6 +51,7 @@
     <string name="tab_people">People</string>
     <string name="tab_profile">Profile</string>
     <string name="chats_title">Chats</string>
+    <string name="unread_count">%1$d unread</string>
     <string name="chats_empty_title">No conversations yet</string>
     <string name="chats_empty_body">Find someone with shared interests and say hi.</string>
     <string name="chats_find_people">Find people</string>

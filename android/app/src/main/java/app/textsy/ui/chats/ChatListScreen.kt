@@ -28,6 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -118,8 +121,13 @@ private fun ChatRow(chat: ChatSummary, myId: String?, onClick: () -> Unit) {
         last.sender == myId -> stringResource(R.string.chat_you_prefix, last.text)
         else -> last.text
     }
+    val unreadText = stringResource(R.string.unread_count, chat.unread)
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .semantics { if (chat.unread > 0) stateDescription = unreadText }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -153,7 +161,8 @@ private fun ChatRow(chat: ChatSummary, myId: String?, onClick: () -> Unit) {
                     modifier = Modifier.weight(1f),
                 )
                 if (chat.unread > 0) {
-                    Badge(containerColor = MaterialTheme.colorScheme.primary) {
+                    // The count is announced through the row's state description instead of as a bare number.
+                    Badge(containerColor = MaterialTheme.colorScheme.primary, modifier = Modifier.clearAndSetSemantics {}) {
                         Text(if (chat.unread > 99) "99+" else chat.unread.toString())
                     }
                 }

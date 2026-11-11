@@ -21,6 +21,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.textsy.R
 import app.textsy.ui.chats.ChatListScreen
@@ -49,9 +51,12 @@ fun MainScreen(
         bottomBar = {
             NavigationBar {
                 Tab.entries.forEach { entry ->
+                    // The badge is drawn inside the icon, which screen readers skip, so say the count on the tab itself.
+                    val unreadText = stringResource(R.string.unread_count, unread)
                     NavigationBarItem(
                         selected = tab == entry,
                         onClick = { tab = entry },
+                        modifier = if (entry == Tab.CHATS && unread > 0) Modifier.semantics { stateDescription = unreadText } else Modifier,
                         label = { Text(stringResource(entry.label)) },
                         icon = {
                             if (entry == Tab.CHATS && unread > 0) {

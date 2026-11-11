@@ -48,6 +48,7 @@
     <string name="tab_people">लोग</string>
     <string name="tab_profile">प्रोफ़ाइल</string>
     <string name="chats_title">चैट</string>
+    <string name="unread_count">%1$d अपठित</string>
     <string name="chats_empty_title">अभी कोई बातचीत नहीं</string>
     <string name="chats_empty_body">साझा रुचियों वाले किसी को खोजें और नमस्ते कहें।</string>
     <string name="chats_find_people">लोगों को खोजें</string>
