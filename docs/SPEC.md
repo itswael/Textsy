@@ -37,7 +37,7 @@ phone-OTP login, end-to-end encryption, AI features.
 
 - **Where:** Meerut, India. Hindi + English UI.
 - **Who:** 18+. First cohort is 10–20 people by word of mouth, then campuses/clubs.
-- **How distributed:** sideloaded Android APK (no store listing yet).
+- **How distributed:** sideloaded Android APK built natively (no store listing yet).
 - **Infra budget:** one small cloud VM, free tiers, open-source stack.
 
 Because the beta is tiny, v1 deliberately avoids GPS/radius filtering (it would empty every list).
@@ -128,7 +128,7 @@ Priority: **P0** must exist for the beta, **P1** should exist for the beta, **P2
 - [~] **SET-3 (P1)** Blocked users list with unblock. *(Backend done. No screen.)*
 
 ### H. Platform & operations
-- [ ] **OPS-1 (P0)** App talks to a configurable API base URL (`EXPO_PUBLIC_API_URL`); no hard-coded localhost.
+- [ ] **OPS-1 (P0)** App talks to a configurable API base URL (`BuildConfig.API_BASE_URL`, set per build type); no hard-coded localhost.
 - [~] **OPS-2 (P0)** Backend automated tests (auth, sparks, requests, chat) run in CI. *(52 tests pass locally against real MongoDB. CI workflow still to add. Sparks/requests will add tests.)*
 - [ ] **OPS-3 (P0)** Deployment on one VM with HTTPS (reverse proxy), process supervision, Mongo backups.
 - [ ] **OPS-4 (P0)** Reproducible Android APK build documented.
@@ -220,8 +220,8 @@ Presence is **not** broadcast globally. It is only visible to users who share a 
 ## 9. Architecture & infrastructure
 
 ```
- Android APK (Expo / React Native, TypeScript)
-        │  HTTPS (REST)  +  WSS (Socket.io)
+ Native Android app (Kotlin, Jetpack Compose)
+        │  HTTPS (REST)  +  WSS (Socket.IO)
         ▼
  Reverse proxy (Caddy, automatic TLS)
         │
@@ -231,13 +231,13 @@ Presence is **not** broadcast globally. It is only visible to users who share a 
         └─►  /uploads on local disk (phase 2: S3-compatible storage)
 ```
 
-- **Mobile:** Expo SDK 53, Expo Router, React Context, `expo-secure-store` for the token.
+- **Mobile (`android/`):** native Android, Kotlin, Jetpack Compose (Material 3), Navigation Compose, ViewModel + StateFlow, Retrofit/OkHttp + kotlinx.serialization, the official Socket.IO Java client, DataStore, and an Android Keystore-encrypted session. Manual dependency injection (no DI framework). `minSdk 26`, `compileSdk/targetSdk 36`. English and Hindi via Android string resources and per-app language.
 - **Backend:** Node 22, ESM, Express 4, Socket.io 4, Mongoose 8, `bcryptjs`, `jsonwebtoken`, `express-validator`.
 - **No Redis in v1.** One server process makes it unnecessary. Revisit only when running more than one instance.
 - **No Firebase in v1.** Own email/password auth (see D1). FCM is added only when push lands (phase 2).
 - **Hosting:** one small VM (1 vCPU / 1 GB class is enough for tens of users), Caddy for TLS and a domain or free dynamic-DNS name, systemd or Docker Compose for supervision, daily `mongodump` to a second location.
-- **Builds:** `eas build --profile preview --platform android` (free tier) or a local Gradle build; APK shared via direct link.
-- **CI:** GitHub Actions: backend tests and mobile lint/typecheck on every push (free for public repos).
+- **Builds:** Android Studio, or `cd android && ./gradlew assembleRelease -Ptextsy.apiUrl=https://<api-host>`. Debug builds read `textsy.debugApiUrl` from `android/gradle.properties`. The APK is shared by direct link.
+- **CI:** GitHub Actions: backend tests, plus Android unit tests and lint, on every push (free for public repos).
 - **Config:** every environment-specific value comes from env vars (`backend/env.example`), never from source.
 
 ## 10. Privacy, safety & compliance
@@ -264,6 +264,10 @@ Presence is **not** broadcast globally. It is only visible to users who share a 
 | D6 | Intro requests gate all chats | Safety and consent; fixes the "cold DM" problem | Never, unless metrics show harm |
 | D7 | Direct chats only, text only | Smallest thing that delivers the value | Beta feedback |
 | D8 | Android-first, APK sideload | Majority platform, no store review, no fee | Beta ends |
+| D11 | **Native Android (Kotlin + Jetpack Compose) instead of React Native / Expo** | Owner has Android Studio and wants a native app; removes the Expo dependency and JS runtime. Cost: Android only; iOS would be a separate app later. | Before any iOS work |
+| D12 | `minSdk 26` (Android 8.0), `compileSdk/targetSdk 36` | Covers nearly all active phones in India without desugaring | Usage data from the beta |
+| D13 | Application id `app.textsy` | Placeholder. **Cannot change after the first release** without a new install | Before the first APK is shared |
+| D14 | AndroidX libraries pinned to AGP 8.13-compatible releases (Compose BOM 2025.10.01, activity 1.11, navigation 2.9, lifecycle 2.9) | The newest releases need AGP 9.1 and compileSdk 37 | Upgrade AGP/Gradle with Android Studio's assistant |
 | D9 | Hindi + English from day one | Retrofitting i18n is expensive | n/a |
 | D10 | Video, ads, payments deferred | Cost/moderation load too high for solo, unfunded | Thousands of active users |
 
