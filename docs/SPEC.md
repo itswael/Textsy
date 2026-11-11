@@ -71,20 +71,20 @@ Discovery is by **city and self-declared area**, plus interests.
 Priority: **P0** must exist for the beta, **P1** should exist for the beta, **P2** later.
 
 ### A. Accounts & identity
-- [~] **ACC-1 (P0)** Register with email + password + unique handle; login by email or handle. *(UI exists but is mocked; backend uses Firebase.)*
-- [ ] **ACC-2 (P0)** Passwords hashed (bcrypt); JWT access token; token stored in secure storage on device.
+- [~] **ACC-1 (P0)** Register with email + password + unique handle; login by email or handle. *(Backend done and tested. App UI is still mocked.)*
+- [~] **ACC-2 (P0)** Passwords hashed (bcrypt); JWT access token; token stored in secure storage on device. *(Backend done. Secure storage on the device pending.)*
 - [ ] **ACC-3 (P0)** Session restore on app start; logout clears token and socket.
-- [ ] **ACC-4 (P1)** Closed-beta invite code required at signup (env-configured list).
-- [ ] **ACC-5 (P1)** Age gate: user confirms they are 18+.
-- [ ] **ACC-6 (P0)** In-app account deletion (hard delete of user, their Sparks, requests, messages marked deleted).
+- [~] **ACC-4 (P1)** Closed-beta invite code required at signup (env-configured list). *(Backend done. Field missing in the app.)*
+- [~] **ACC-5 (P1)** Age gate: user confirms they are 18+. *(Backend enforces it. Checkbox missing in the app.)*
+- [~] **ACC-6 (P0)** In-app account deletion (hard delete of user, their Sparks, requests, messages marked deleted). *(Backend done: password-confirmed, chats retired, messages scrubbed, sockets dropped. Sparks/requests do not exist yet. App button is still a TODO.)*
 - [ ] **ACC-7 (P2)** Email verification, password reset.
 - [ ] **ACC-8 (P2)** Phone-number OTP login (number never displayed).
 
 ### B. Profile
-- [~] **PRF-1 (P0)** Edit display name, bio (≤160 chars), avatar (emoji in v1), language, city, area. *(Edit screen is a TODO.)*
-- [~] **PRF-2 (P0)** Interests: choose from a seeded list + custom, max 10, each ≤20 chars. *(Stored; picker UI missing.)*
+- [~] **PRF-1 (P0)** Edit display name, bio (≤160 chars), avatar (emoji in v1), language, city, area. *(`PUT /users/me` done and tested. Edit screen is a TODO.)*
+- [~] **PRF-2 (P0)** Interests: choose from a seeded list + custom, max 10, each ≤20 chars. *(Backend normalises, dedupes and limits them. Picker UI missing.)*
 - [ ] **PRF-3 (P1)** Photo avatar upload.
-- [ ] **PRF-4 (P0)** Public profile view by handle (name, bio, interests, area, active Sparks). Never email/phone.
+- [~] **PRF-4 (P0)** Public profile view by handle (name, bio, interests, area, active Sparks). Never email/phone. *(`GET /users/:handle` done and tested; no Sparks yet; no screen.)*
 
 ### C. Sparks (the core feed)
 - [ ] **SPK-1 (P0)** Create Spark: text ≤280, 1–5 tags, expiry 1/3/7 days.
@@ -96,8 +96,8 @@ Priority: **P0** must exist for the beta, **P1** should exist for the beta, **P2
 - [ ] **SPK-7 (P2)** Optional distance buckets using device location.
 
 ### D. Discovery (People)
-- [ ] **DSC-1 (P0)** People list in my city, ranked by shared interests, then recent activity.
-- [ ] **DSC-2 (P0)** Search by handle / interest (escaped, case-insensitive, min 2 chars).
+- [~] **DSC-1 (P0)** People list in my city, ranked by shared interests, then recent activity. *(Backend done and tested. Explore screen still shows mock data.)*
+- [~] **DSC-2 (P0)** Search by handle / interest (escaped, case-insensitive, min 2 chars). *(Backend done and tested.)*
 - [ ] **DSC-3 (P1)** Explain the match ("You both like cricket, coffee").
 - [ ] **DSC-4 (P2)** Hide me from people in my phone contacts.
 
@@ -105,31 +105,31 @@ Priority: **P0** must exist for the beta, **P1** should exist for the beta, **P2
 - [ ] **CHT-1 (P0)** Send intro request (note ≤200 chars), optional Spark reference. One pending request per pair; daily send cap (default 10).
 - [ ] **CHT-2 (P0)** Inbox of received requests; accept / ignore. Ignored requests are silent to the sender.
 - [ ] **CHT-3 (P0)** Accepting creates (or reuses) a direct chat; the note becomes the first message.
-- [ ] **CHT-4 (P0)** Realtime text messages (≤1000 chars) via WebSocket with ack; history via REST, paginated.
-- [ ] **CHT-5 (P0)** Chat list with last message, time, unread badge; persisted on the server (no local-only chats).
-- [ ] **CHT-6 (P1)** Typing indicator, read state ("seen").
-- [ ] **CHT-7 (P1)** Offline resilience: queued sends retry on reconnect; messages de-duplicated by client id.
+- [~] **CHT-4 (P0)** Realtime text messages (≤1000 chars) via WebSocket with ack; history via REST, paginated. *(Backend done and tested. App not wired.)*
+- [~] **CHT-5 (P0)** Chat list with last message, time, unread badge; persisted on the server (no local-only chats). *(Backend done and tested. App still uses local mock chats.)*
+- [~] **CHT-6 (P1)** Typing indicator, read state ("seen"). *(Backend done and tested.)*
+- [~] **CHT-7 (P1)** Offline resilience: queued sends retry on reconnect; messages de-duplicated by client id. *(Server-side de-duplication done and tested. Client queue pending.)*
 - [ ] **CHT-8 (P1)** Push notifications for requests and messages (FCM via Expo).
 - [ ] **CHT-9 (P2)** Image messages, reactions, replies, edit/delete, search in chat.
 - [ ] **CHT-10 (P2)** Group chats, pinned messages, archive.
 
 ### F. Safety & moderation
-- [ ] **SAF-1 (P0)** Block user: mutual invisibility (feeds, search, profile, requests, chat send).
+- [~] **SAF-1 (P0)** Block user: mutual invisibility (feeds, search, profile, requests, chat send). *(Done for discover, search, profile, chat list and chat send. Sparks and requests do not exist yet. No app UI.)*
 - [ ] **SAF-2 (P0)** Report user or Spark with a reason; stored for review.
-- [ ] **SAF-3 (P0)** Banned users cannot log in, connect a socket, or send anything.
-- [ ] **SAF-4 (P0)** Rate limits per user (not only per IP; many Indian mobile users share carrier IPs).
+- [~] **SAF-3 (P0)** Banned users cannot log in, connect a socket, or send anything. *(Login, REST and socket handshake are checked on every request. A socket already open when a ban is applied stays connected until it drops.)*
+- [~] **SAF-4 (P0)** Rate limits per user (not only per IP; many Indian mobile users share carrier IPs). *(Login throttle, per-user REST limit and socket send limit are in. Only the login and socket limits have tests.)*
 - [ ] **SAF-5 (P1)** Minimal admin CLI/script: list reports, ban/unban, delete content.
 - [ ] **SAF-6 (P1)** Terms of Service and Privacy Policy screens; grievance contact email.
 - [ ] **SAF-7 (P2)** Selfie/liveness "verified human" badge.
 
 ### G. Settings & i18n
 - [ ] **SET-1 (P0)** Language switch Hindi / English; all strings externalised.
-- [ ] **SET-2 (P1)** Privacy toggles that actually do something: show online status, show last seen.
-- [ ] **SET-3 (P1)** Blocked users list with unblock.
+- [~] **SET-2 (P1)** Privacy toggles that actually do something: show online status, show last seen. *(Backend honours both in profiles and presence. The app toggles are still local state.)*
+- [~] **SET-3 (P1)** Blocked users list with unblock. *(Backend done. No screen.)*
 
 ### H. Platform & operations
 - [ ] **OPS-1 (P0)** App talks to a configurable API base URL (`EXPO_PUBLIC_API_URL`); no hard-coded localhost.
-- [ ] **OPS-2 (P0)** Backend automated tests (auth, sparks, requests, chat) run in CI.
+- [~] **OPS-2 (P0)** Backend automated tests (auth, sparks, requests, chat) run in CI. *(52 tests pass locally against real MongoDB. CI workflow still to add. Sparks/requests will add tests.)*
 - [ ] **OPS-3 (P0)** Deployment on one VM with HTTPS (reverse proxy), process supervision, Mongo backups.
 - [ ] **OPS-4 (P0)** Reproducible Android APK build documented.
 - [ ] **OPS-5 (P1)** Structured logs, `/health`, simple uptime check.
@@ -192,24 +192,26 @@ Errors are `{ "error": "message" }` with an appropriate HTTP status.
 | Area | Endpoints |
 |---|---|
 | Auth | `POST /auth/register` · `POST /auth/login` · `GET /auth/me` · `DELETE /auth/me` |
-| Profile | `GET /users/me` · `PUT /users/me` · `GET /users/:handle` · `GET /users/search?q=` · `GET /users/discover` |
-| Safety | `POST /users/:handle/block` · `DELETE /users/:handle/block` · `GET /users/blocked` · `POST /reports` |
+| Profile | `GET /users/me` · `PUT /users/me` · `GET /users/:handle` · `GET /users/search?q=` · `GET /users/discover?tag=&area=&limit=&skip=` |
+| Safety | `POST /users/:handle/block` · `DELETE /users/:handle/block` · `GET /users/blocked` · `POST /reports` *(reports not built yet)* |
 | Sparks | `POST /sparks` · `GET /sparks?tag=&area=&cursor=` · `GET /sparks/mine` · `DELETE /sparks/:id` |
 | Intros | `POST /intros` · `GET /intros/inbox` · `POST /intros/:id/accept` · `POST /intros/:id/ignore` |
-| Chats | `GET /chats` · `GET /chats/:id` · `GET /chats/:id/messages?before=` · `POST /chats/:id/read` |
+| Chats | `GET /chats` · `POST /chats {handle}` *(temporary, behind `ALLOW_DIRECT_CHAT_CREATION`)* · `GET /chats/:id` · `GET /chats/:id/messages?before=&limit=` · `POST /chats/:id/read` |
 | Misc | `GET /health` |
 
 ### WebSocket (Socket.io)
 
-Auth: JWT in `auth.token` at handshake. The server auto-joins each socket to `user:<id>` and all of the user's chat rooms.
+Auth: JWT in `auth.token` at handshake. Every socket joins a private `user:<id>` room, so events reach a person on all their devices. There are no per-chat rooms.
 
 | Direction | Event | Payload |
 |---|---|---|
-| client → server | `message:send` | `{ chatId, text, clientId }` with ack `{ ok, message? , error? }` |
+| client → server | `message:send` | `{ chatId, text, clientId }` with ack `{ ok, message, duplicate }` or `{ ok:false, error, code }` (`invalid_text`, `not_found`, `rate_limited`, …) |
 | client → server | `typing` | `{ chatId, isTyping }` |
-| client → server | `chat:read` | `{ chatId }` |
+| client → server | `chat:read` | `{ chatId }` with ack `{ ok }` |
 | server → client | `message:new` | `{ message }` |
-| server → client | `chat:updated` | `{ chatId, lastMessage, unread }` |
+| server → client | `chat:updated` | `{ chatId, lastMessage?, unread }` (`unread` is the receiving user's own count) |
+| server → client | `chat:read` | `{ chatId, userId, readAt }` (the other person read the chat) |
+| server → client | `presence` | `{ userId, isOnline, lastSeen }` (only to people who share a chat) |
 | server → client | `typing` | `{ chatId, userId, isTyping }` |
 | server → client | `intro:new` / `intro:accepted` | `{ intro }` / `{ intro, chat }` |
 
@@ -270,17 +272,17 @@ Presence is **not** broadcast globally. It is only visible to users who share a 
 Found by code review; update status as they are fixed.
 
 **Backend**
-- [ ] `services/socketService.js`: `chat.lastMessage` is assigned an object but the schema defines an ObjectId → saving fails. `readBy` is pushed plain ids but the schema expects `{user, readAt}`. Reactions use `userId` but the schema field is `user`. Message sending is likely broken.
-- [ ] `routes/messages.js`: `chat.updateUnreadCount()` is called in a loop without `await`, each calling `save()` on the same document (parallel-save error / lost updates).
-- [ ] `routes/users.js`: discover `select()` omits `preferences`, so privacy filters always hide online status, last seen and location. The blocked-users `$nin` overwrites the `$ne: userId` filter, so a user can discover themselves.
-- [ ] `routes/users.js`, `models/Message.js`: user input passed straight to `$regex` (injection / ReDoS).
-- [ ] `routes/auth.js`: `GET /profile/:firebaseUid` is unauthenticated; signup writes `preferences` fields that do not exist in the schema.
-- [ ] `services/socketService.js`: `io.emit('user-status-changed')` broadcasts everyone's presence to every client; the online map is in-memory only.
-- [ ] `routes/chats.js`: any user can create a chat with any other user (no block check, no consent, participant ids not validated).
-- [ ] Bans and deleted users are only checked on `/users` routes, not on chats, messages or sockets; the JWT is not checked against the database.
-- [ ] `config/database.js`: deprecated Mongo options, Redis v3-style `retry_strategy` (ignored by redis v4), duplicate SIGINT handlers; `app.js` exits the process on any unhandled rejection.
-- [ ] `middleware/auth.js`: `requireAdmin` reads `user.isAdmin`, which the schema does not define. Rate limit is per IP only.
-- [ ] No tests, no CI, no Dockerfile.
+- [x] `services/socketService.js`: `chat.lastMessage` is assigned an object but the schema defines an ObjectId → saving fails. `readBy` is pushed plain ids but the schema expects `{user, readAt}`. Reactions use `userId` but the schema field is `user`. Message sending is likely broken. **Fixed:** chat last message is an embedded snapshot, read state is per-user counters, reactions are out of scope. A test sends real messages end to end.
+- [x] `routes/messages.js`: `chat.updateUnreadCount()` is called in a loop without `await`, each calling `save()` on the same document (parallel-save error / lost updates). **Fixed:** unread counts use one atomic `$inc`; a test fires 10 concurrent sends and checks the count.
+- [x] `routes/users.js`: discover `select()` omits `preferences`, so privacy filters always hide online status, last seen and location. The blocked-users `$nin` overwrites the `$ne: userId` filter, so a user can discover themselves. **Fixed:** discovery uses an aggregation, privacy fields are applied, and a test checks that you never discover yourself.
+- [x] `routes/users.js`, `models/Message.js`: user input passed straight to `$regex` (injection / ReDoS). **Fixed:** input is escaped; a test tries `.*`, `((`, `[a-` and others.
+- [x] `routes/auth.js`: `GET /profile/:firebaseUid` is unauthenticated; signup writes `preferences` fields that do not exist in the schema. **Fixed:** that route is gone and preferences match the schema.
+- [x] `services/socketService.js`: `io.emit('user-status-changed')` broadcasts everyone's presence to every client; the online map is in-memory only. **Fixed:** presence goes only to chat counterparts and respects the privacy toggle. Online state is still in memory, so run a single instance.
+- [~] `routes/chats.js`: any user can create a chat with any other user (no block check, no consent, participant ids not validated). **Partly fixed:** handles are validated and blocks are respected, and creation is a temporary dev flag that is off in production. Real consent arrives with intro requests.
+- [x] Bans and deleted users are only checked on `/users` routes, not on chats, messages or sockets; the JWT is not checked against the database. **Fixed:** one `authenticateToken` is used by every REST route and the socket handshake and hits the database each time.
+- [x] `config/database.js`: deprecated Mongo options, Redis v3-style `retry_strategy` (ignored by redis v4), duplicate SIGINT handlers; `app.js` exits the process on any unhandled rejection. **Fixed:** Redis is removed, there is one shutdown handler, and unhandled rejections are logged instead of killing the process.
+- [x] `middleware/auth.js`: `requireAdmin` reads `user.isAdmin`, which the schema does not define. Rate limit is per IP only. **Fixed:** the unused admin middleware is removed and limits are per user.
+- [~] No tests, no CI, no Dockerfile. **Partly fixed:** 52 integration tests exist; CI and deployment files are still to do.
 
 **Mobile**
 - [ ] `contexts/AuthContext.tsx`: sign-in always returns the same hard-coded user (`Alex Chen`, id `1`); the password is logged to the console.
@@ -305,3 +307,4 @@ Found by code review; update status as they are fixed.
 | Date | Change |
 |---|---|
 | 2026-11-11 | Initial spec drafted (v0.1). |
+| 2026-11-11 | Backend Phase 0 done: own auth, reworked models, discovery/search/blocking, persisted chats and realtime messaging, 52 passing tests. Known backend issues fixed; spec tables updated to match the implementation. |
