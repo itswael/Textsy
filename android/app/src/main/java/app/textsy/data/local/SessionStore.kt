@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.core.content.edit
 import app.textsy.data.model.SelfUser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -43,7 +44,7 @@ class KeystoreSessionStore(context: Context, private val json: Json) : SessionSt
             json.decodeFromString<StoredSession>(plain.decodeToString())
         } catch (e: Exception) {
             // Corrupt data or a key invalidated by a lock-screen change: start signed out.
-            prefs.edit().remove(KEY_BLOB).apply()
+            prefs.edit { remove(KEY_BLOB) }
             null
         }
     }
@@ -53,11 +54,11 @@ class KeystoreSessionStore(context: Context, private val json: Json) : SessionSt
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
         val encrypted = cipher.doFinal(json.encodeToString(StoredSession.serializer(), session).encodeToByteArray())
         val blob = Base64.encodeToString(cipher.iv + encrypted, Base64.NO_WRAP)
-        prefs.edit().putString(KEY_BLOB, blob).apply()
+        prefs.edit { putString(KEY_BLOB, blob) }
     }
 
     override suspend fun clear() = withContext(Dispatchers.IO) {
-        prefs.edit().remove(KEY_BLOB).apply()
+        prefs.edit { remove(KEY_BLOB) }
     }
 
     private fun secretKey(): SecretKey {
