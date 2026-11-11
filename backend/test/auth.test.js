@@ -150,7 +150,8 @@ describe('auth', () => {
       await Message.create({ chatId: chat._id, sender: alice.user.id, text: 'hello bob' });
 
       const wrong = await t.api.delete('/api/auth/me').set(bearer(alice.token)).send({ password: 'nope-nope' });
-      assert.equal(wrong.status, 401);
+      assert.equal(wrong.status, 403, 'a wrong password must not look like an expired session');
+      assert.equal(wrong.body.code, 'wrong_password');
       assert.ok(await User.exists({ _id: alice.user.id }));
 
       const ok = await t.api.delete('/api/auth/me').set(bearer(alice.token)).send({ password: alice.password });

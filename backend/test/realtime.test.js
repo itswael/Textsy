@@ -23,9 +23,17 @@ describe('realtime', () => {
   describe('connection', () => {
     it('rejects missing, invalid and banned credentials', async () => {
       await assert.rejects(t.socket(undefined), /Authentication required/);
-      await assert.rejects(t.socket('garbage'), /Invalid token/);
+      await assert.rejects(t.socket('garbage'), (error) => {
+        assert.match(error.message, /Invalid token/);
+        assert.equal(error.data.code, 'auth');
+        return true;
+      });
       await User.updateOne({ _id: bob.user.id }, { isBanned: true });
-      await assert.rejects(t.socket(bob.token), /suspended/);
+      await assert.rejects(t.socket(bob.token), (error) => {
+        assert.match(error.message, /suspended/);
+        assert.equal(error.data.code, 'banned');
+        return true;
+      });
     });
 
     it('tracks online status across several devices', async () => {

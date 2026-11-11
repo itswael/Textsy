@@ -99,7 +99,8 @@ export const createAuthRouter = (config) => {
     asyncHandler(async (req, res) => {
       const password = requireString(req.body?.password, 'Password');
       const account = await User.findById(req.userId).select('+passwordHash');
-      if (!(await account.verifyPassword(password))) throw new HttpError(401, 'Incorrect password');
+      // 403, not 401: a typo here must not look like an expired session to the app.
+      if (!(await account.verifyPassword(password))) throw new HttpError(403, 'Incorrect password', 'wrong_password');
 
       const userId = account._id;
       await Message.updateMany({ sender: userId }, { $set: { text: '[deleted]', deletedAt: new Date() } });
