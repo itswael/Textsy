@@ -1,46 +1,34 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
 # dependencies
 node_modules/
 
-# Expo
-.expo/
-dist/
-web-build/
-expo-env.d.ts
+# Android / Gradle
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.hprof
 
-# Native
-.kotlin/
-*.orig.*
+# signing keys and secrets (never commit these)
 *.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-
-# Metro
-.metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
-.DS_Store
+*.keystore
+keystore.properties
 *.pem
-
-# local env files
-.env*.local
-
-# typescript
-*.tsbuildinfo
-
-app-example
-
-# backend secrets and runtime data
+*.key
+*.p12
 .env
 .env.*
 !.env.example
 backend/uploads/
 backend/serviceAccountKey.json
+
+# macOS
+.DS_Store
+
+# debug
+npm-debug.*
